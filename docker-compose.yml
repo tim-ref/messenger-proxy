@@ -1,0 +1,90 @@
+# Copyright (C) 2023 akquinet GmbH
+
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+version: "3.9"
+
+services:
+  messenger-proxy:
+    container_name: timref-messenger-proxy
+    build:
+      context: .
+      args:
+        - JAR_FILE=target/mp-backend-*-jar-with-dependencies.jar
+    ports:
+      # reverse proxy
+      - "8090:8090"
+      # forward proxy
+      - "8093:8093"
+      # health check
+      - "1233:1233"
+    volumes:
+      - ./certificates/key.pem:/app/certificates/key.pem
+      - ./certificates/ca.crt:/app/certificates/ca.crt
+    environment:
+      CONFIGURATION_FILE_PATH: "/app/resources/application-local-docker.yml"
+    depends_on:
+      - db
+    networks:
+      - default
+      - timref-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  db:
+    container_name: messenger_proxy_db
+    image: postgres:15-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: messenger-proxy-db
+      POSTGRES_USER: messenger-proxy
+      POSTGRES_PASSWORD: password
+    healthcheck:
+      test: pg_isready -U messenger-proxy -d messenger-proxy-db
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  synapse:
+    container_name: messenger_proxy_synapse
+    build:
+      context: ./synapse
+    environment:
+      TZ: DE
+      UID: 0
+      GID: 0
+      SYNAPSE_ADMIN_USER: admin
+      SYNAPSE_ADMIN_PASSWORD: admin
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: synapsepassword
+      POSTGRES_DB: synapse
+      POSTGRES_HOST: synapse-db
+    depends_on:
+      - synapse-db
+    networks:
+      - default
+      - timref-network
+    ports:
+      - "8083:8083"
+
+  synapse-db:
+    image: postgres:15-alpine
+    container_name: messenger_proxy_synapse_db
+    environment:
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: synapsepassword
+      POSTGRES_DB: synapse
+      POSTGRES_INITDB_ARGS: '--encoding=UTF-8 --lc-collate=C --lc-ctype=C'
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: pg_isready -U synapse -d synapse
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+networks:
+  timref-network:
+    name: timref-network
+    external: true

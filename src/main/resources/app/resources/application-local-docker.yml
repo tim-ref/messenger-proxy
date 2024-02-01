@@ -1,0 +1,62 @@
+# Copyright (C) 2023 akquinet GmbH
+
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+# changes to the config files should be mirrored ro sytest/lib/Homeserver/MessengerProxy.pm line 326 and following
+
+registrationServiceConfig:
+  baseUrl: "http://host.docker.internal"
+  servicePort: "8080"
+  healthPort: "8081"
+  federationListEndpoint: "/backend/federation"
+  invitePermissionCheckEndpoint: "/backend/vzd/invite"
+  readinessEndpoint: "/actuator/health/readiness"
+
+federationListCache:
+  baseDirectory: "federationList"
+  file: "federationList/federationList.json"
+  metaFile: "federationList/federationList-meta.json"
+
+inboundProxy:
+  homeserverUrl: "http://host.docker.internal:8083"
+  synapseHealthEndpoint: "/health"
+  synapsePort: 8083
+  port: 8090
+  enforceDomainList: true
+  accessTokenToUserIdCacheDuration: 1h # for format see https://github.com/sksamuel/hoplite#duration-formats
+
+outboundProxy:
+  port: 8093
+  enforceDomainList: true
+  baseDirectory: "/app/certificates"
+  caCertificateFile: "/app/certificates/ca.crt"
+  caPrivateKeyFile: "/app/certificates/key.pem"
+  domainWhiteList: ""
+  ssoDomain: ""
+
+actuatorConfig:
+  port: 1233
+  basePath: "/actuator"
+
+contactManagement:
+  port: 8070
+
+database:
+  jdbcUrl: "jdbc:postgresql://db:5432/messenger-proxy-db"
+  dbUser: "messenger-proxy"
+  dbPassword: "password"
+
+logInfoConfig:
+  url: "http://host.docker.internal:9020/add-performance-data"
+  professionId: ""
+  telematikId: ""
+  instanceId: ""
+  homeFQDN: "home.de"
+
+prometheusClient:
+  port: 1234
+  enableDefaultExports: true
+
+logLevelResetConfig:
+  logLevelResetDelayInSeconds: 5
+  resetLogLevel: "DEBUG"

@@ -1,0 +1,63 @@
+# Copyright (C) 2023 akquinet GmbH
+
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+
+# changes to the config files should be mirrored ro sytest/lib/Homeserver/MessengerProxy.pm line 326 and following
+
+registrationServiceConfig:
+  baseUrl: ${REGISTRATION_SERVICE_URL}
+  servicePort: ${REGISTRATION_SERVICE_SERVICE_PORT}
+  healthPort: ${REGISTRATION_SERVICE_HEALTH_PORT}
+  federationListEndpoint: ${REGISTRATION_SERVICE_FEDERATION_LIST_ENDPOINT}
+  invitePermissionCheckEndpoint: ${REGISTRATION_SERVICE_INVITE_PERMISSION_CHECK_ENDPOINT}
+  readinessEndpoint: ${REGISTRATION_SERVICE_READINESS_ENDPOINT}
+
+federationListCache:
+  baseDirectory: "federationList"
+  file: "federationList/federationList.json"
+  metaFile: "federationList/federationList-meta.json"
+
+inboundProxy:
+  homeserverUrl: ${HOMESERVER_URL}
+  synapseHealthEndpoint: "/health"
+  synapsePort: 443
+  port: ${MESSENGER_PROXY_PORT}
+  enforceDomainList: ${ENFORCE_DOMAIN_LIST}
+  accessTokenToUserIdCacheDuration: 1h # for format see https://github.com/sksamuel/hoplite#duration-formats
+
+outboundProxy:
+  port: ${FORWARD_PROXY_PORT}
+  enforceDomainList: ${ENFORCE_DOMAIN_LIST}
+  baseDirectory: "/app/certificates"
+  caCertificateFile: "/app/certificates/ca.crt"
+  caPrivateKeyFile: "/app/certificates/key.pem"
+  domainWhiteList: ${FORWARD_PROXY_WHITE_DOMAIN_LIST}
+  ssoDomain: ${FORWARD_PROXY_SSO_DOMAIN}
+
+actuatorConfig:
+  port: ${HEALTHCHECK_PORT}
+  basePath: "/actuator"
+
+contactManagement:
+  port: ${CONTACT_MANAGEMENT_PORT}
+
+database:
+  jdbcUrl: ${PROXY_DB_URL}
+  dbUser: ${PROXY_DB_USER}
+  dbPassword: ${PROXY_DB_PASSWORD}
+
+logInfoConfig:
+  url: ${LOGGING_SERVICE_URL}
+  professionId: ${LOGGING_SERVICE_PROFESSSIONID}
+  telematikId: ${LOGGING_SERVICE_TELEMATIKID}
+  instanceId: ${LOGGING_SERVICE_INSTANCEID}
+  homeFQDN: ${homeFQDN}
+
+prometheusClient:
+  port: 1234
+  enableDefaultExports: true
+
+logLevelResetConfig:
+  logLevelResetDelayInSeconds: 1800
+  resetLogLevel: "INFO"
