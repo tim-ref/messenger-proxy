@@ -1,0 +1,22 @@
+**/development/**
+chart/*/development/**
+### Maven ###
+target/
+/local.properties
+
+# idea
+.idea/
+**/*.iml
+**/*.iws
+**/*.ipr
+**/*.log.gz
+
+federationList/
+federationList/*
+
+certificates/ca.crt
+certificates/ca.key
+certificates/key.pem
+
+### Environment variables ###
+**/.envrc
