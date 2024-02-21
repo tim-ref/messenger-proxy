@@ -10,7 +10,7 @@
 
     <groupId>de.akquinet.timref.fachdienst.messenger-proxy</groupId>
     <artifactId>mp-backend</artifactId>
-    <version>0.0.3</version>
+    <version>0.0.4</version>
 
     <name>Messenger-Proxy</name>
     <description>Messenger-Proxy für die TIM Referenzimplementierung</description>
@@ -653,6 +653,9 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-release-plugin</artifactId>
+                <configuration>
+                    <releaseProfiles>release</releaseProfiles>
+                </configuration>
             </plugin>
         </plugins>
     </build>
@@ -668,6 +671,35 @@
             <properties>
                 <defaultLogLevel>${env.LOG_LEVEL}</defaultLogLevel>
             </properties>
+        </profile>
+        <profile>
+            <id>release</id>
+            <properties>
+                <activeProfile /> <!-- run tests with default profile -->
+            </properties>
+            <build>
+                <plugins>
+                    <!-- maven-assembly-plugin -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <configuration>
+                            <descriptors>
+                                <descriptor>assembly/assembly.xml</descriptor>
+                            </descriptors>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>assemble</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 
@@ -693,7 +725,7 @@
     <scm>
         <connection>${env.CI_SCM_CONNECTION}</connection>
         <developerConnection>${env.CI_SCM_DEVELOPER_CONNECTION}</developerConnection>
-        <tag>0.0.3</tag>
+        <tag>0.0.4</tag>
         <url>${env.CI_SCM_URL}</url>
     </scm>
 </project>

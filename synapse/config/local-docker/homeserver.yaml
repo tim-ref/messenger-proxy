@@ -186,7 +186,7 @@ enable_registration_without_verification: false
 # disable_msisdn_registration: false
 enable_3pid_lookup: true
 registration_requires_token: false
-registration_shared_secret: ";&k+UBK8l~qG66YBiWw21.CR^^n:mes+wO_MM4xQl9@2Hpz5Ms" # changed
+registration_shared_secret: "some-secret" # changed
 # registration_shared_secret_path: "/secret/registration_shared_secret" # changed
 bcrypt_rounds: 14
 allow_guest_access: false
@@ -219,8 +219,8 @@ report_stats_endpoint: http://host.docker.internal:9020/add-statistics-data # ch
 ###############################################################################################################
 track_puppeted_user_ips: false
 track_appservice_user_ips: false
-macaroon_secret_key: "G2iw:y;ddjfA~*ypvXkCoWpRZ5pQY0j&DXBhpw6pC6WWsH183m" # changed
-form_secret: "-EADJ@+7=tmuKkv_8.tjAa,=pa&XB++Wun=-g7zd#BJ50EIPRZ" # changed
+macaroon_secret_key: "some-secret" # changed
+form_secret: "some-secret" # changed
 ##########################################################################################################
 # Signing Keys                                                                                           #
 # https://matrix-org.github.io/synapse/latest/usage/configuration/config_documentation.html#signing-keys #
