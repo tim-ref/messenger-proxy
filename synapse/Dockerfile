@@ -1,4 +1,4 @@
-FROM matrixdotorg/synapse:v1.86.0 AS base
+FROM matrixdotorg/synapse:v1.99.0 AS base
 
 # Build and install modules
 FROM base

@@ -7,14 +7,19 @@
 package de.akquinet.timref.proxy.client.model.route
 
 import io.ktor.resources.*
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import net.folivo.trixnity.core.HttpMethod
-import net.folivo.trixnity.core.HttpMethodType
+import net.folivo.trixnity.core.HttpMethodType.GET
 import net.folivo.trixnity.core.MatrixEndpoint
-import net.folivo.trixnity.core.WithoutAuth
 
+/**
+ * @see <a href="https://spec.matrix.org/legacy/client_server/r0.6.1.html#get-matrix-client-r0-events">matrix spec</a>
+ */
 @Serializable
-@Resource("/_synapse/client/oidc/callback")
-@HttpMethod(HttpMethodType.GET)
-@WithoutAuth
-object SsoCallback : MatrixEndpoint<Unit, Unit>
+@Resource("/_matrix/client/r0/events")
+@HttpMethod(GET)
+data class EventsR0(
+    @SerialName("from") val from: String? = null,
+    @SerialName("timeout") val timeout: Int? = null,
+) : MatrixEndpoint<Unit, Any>

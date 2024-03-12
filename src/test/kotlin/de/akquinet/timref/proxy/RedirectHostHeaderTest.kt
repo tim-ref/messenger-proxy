@@ -9,10 +9,8 @@ package de.akquinet.timref.proxy
 import io.kotest.assertions.assertSoftly
 import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
 import io.ktor.client.*
-import io.ktor.client.engine.apache5.*
-import io.ktor.client.engine.java.*
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -20,12 +18,20 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.callloging.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.slf4j.event.Level
 
 class ForwardRequestTest : ShouldSpec({
+    val httpClient = HttpClient(OkHttp) {
+        install(ContentNegotiation) {
+            json()
+        }
+        followRedirects = false
+    }
     should("set host-header correctly") {
         val destinationServer = embeddedServer(Netty, applicationEngineEnvironment {
             connector {
@@ -54,58 +60,13 @@ class ForwardRequestTest : ShouldSpec({
                 routing {
                     get("/") {
                         call.request.host() shouldBe "unicorn"
-                        forwardRedirect(call, call.request.uri.mergeToUrl("http://localhost:3101"), "unicorn")
+                        forwardRequest(call, httpClient, call.request.uri.mergeToUrl("http://localhost:3101"), null)
                     }
                 }
             }
         }).start()
 
-        val response = HttpClient(Apache5).get("http://localhost:3100") {
-            headers.append("Host", "unicorn")
-        }
-        assertSoftly(response) {
-            status shouldBe HttpStatusCode.OK
-            bodyAsText() shouldBe "ok"
-        }
-
-        destinationServer.stop()
-        proxy.stop()
-    }
-    should("set host-header should fail") {
-        val destinationServer = embeddedServer(Netty, applicationEngineEnvironment {
-            connector {
-                port = 3101
-            }
-            module {
-                install(CallLogging) {
-                    level = Level.TRACE
-                }
-                routing {
-                    get("/") {
-                        call.request.host() shouldBe "unicorn"
-                        call.respond("ok")
-                    }
-                }
-            }
-        }).start()
-        val proxy = embeddedServer(Netty, applicationEngineEnvironment {
-            connector {
-                port = 3100
-            }
-            module {
-                install(CallLogging) {
-                    level = Level.TRACE
-                }
-                routing {
-                    get("/") {
-                        call.request.host() shouldNotBe "unicorn"
-                        forwardRedirect(call, call.request.uri.mergeToUrl("http://localhost:3101"), "unicorn")
-                    }
-                }
-            }
-        }).start()
-
-        val response = HttpClient(Java).get("http://localhost:3100") {
+        val response = httpClient.get("http://localhost:3100") {
             headers.append("Host", "unicorn")
         }
         assertSoftly(response) {

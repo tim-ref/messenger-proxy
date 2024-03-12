@@ -11,7 +11,7 @@ import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
 import io.ktor.client.*
 import io.ktor.client.engine.*
-import io.ktor.client.engine.java.*
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -36,6 +36,7 @@ import java.security.SecureRandom
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509TrustManager
 import kotlin.text.toCharArray
 
 class ProxyConnectionHandlerTest : ShouldSpec({
@@ -101,25 +102,27 @@ class ProxyConnectionHandlerTest : ShouldSpec({
                 addBefore("http1", "tunnel", ProxyConnectionHandler(outboundProxyCertificateManager))
             }
         }.start()
-        httpClient = HttpClient(Java) {
+        httpClient = HttpClient(OkHttp) {
             install(Logging) {
                 level = LogLevel.ALL
             }
             engine {
                 proxy = ProxyBuilder.http("http://0.0.0.0:$testPort/")
                 config {
-                    sslContext(
+                    sslSocketFactory(
                         SSLContext.getInstance("TLS")
-                            .apply {
-                                init(
-                                    KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()).apply {
-                                        init(keyStore, "password".toCharArray())
-                                    }.keyManagers,
-                                    TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
-                                        .apply { init(keyStore) }.trustManagers,
-                                    SecureRandom()
-                                )
-                            }
+                        .apply {
+                            init(
+                                KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
+                                    .apply { init(keyStore, "password".toCharArray())
+                                }.keyManagers,
+                                TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+                                    .apply { init(keyStore) }.trustManagers,
+                                SecureRandom()
+                            )
+                        }.socketFactory,
+                        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+                            .apply { init(keyStore) }.trustManagers[0] as X509TrustManager
                     )
                 }
             }

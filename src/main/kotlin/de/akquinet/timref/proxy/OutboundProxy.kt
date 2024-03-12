@@ -6,12 +6,7 @@
 
 package de.akquinet.timref.proxy
 
-import de.akquinet.timref.proxy.federation.Destination
-import de.akquinet.timref.proxy.federation.FederationListCache
-import de.akquinet.timref.proxy.federation.MatrixFederationCheckAuth.Mode.OUTBOUND
-import de.akquinet.timref.proxy.federation.OutboundFederationRoutes
-import de.akquinet.timref.proxy.federation.matrixFederationCheckAuth
-import io.ktor.client.*
+import de.akquinet.timref.proxy.federation.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -22,6 +17,8 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 import mu.KotlinLogging
+import de.akquinet.timref.proxy.federation.MatrixFederationCheckAuth.Mode.OUTBOUND
+import io.ktor.client.*
 import net.folivo.trixnity.api.server.matrixApiServer
 import net.folivo.trixnity.core.ErrorResponse
 import net.folivo.trixnity.core.MatrixServerException
@@ -82,14 +79,17 @@ class OutboundProxyImpl(
                         }
                     }
 
+                    route("/recaptcha/api/siteverify") {
+                        handle {
+                            forwardRequest(call, httpClient, getDestinationUrl(call = call.request), null)
+                        }
+                    }
+
                     route("{...}") {
                         handle {
                             val host = getDestinationUrl(call = call.request).host
                             if (host == outboundProxyConfiguration.ssoDomain || "https://$host/" == outboundProxyConfiguration.ssoDomain) {
                                 forwardRequest(call, httpClient, getDestinationUrl(call = call.request), null)
-                            } else if (!outboundProxyConfiguration.enforceDomainList) {
-                                forwardRequest(call, httpClient, getDestinationUrl(call = call.request), null)
-
                             } else {
                                 val requestBody = call.receive<String>()
                                 val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }

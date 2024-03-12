@@ -17,11 +17,13 @@ import de.akquinet.timref.proxy.mocks.RawDataServiceStub
 import de.akquinet.timref.proxy.mocks.VZDPublicIDCheckMock
 import io.kotest.matchers.shouldBe
 import io.ktor.client.*
-import io.ktor.client.engine.java.*
+import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.engine.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.update
@@ -32,7 +34,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.time.Duration.Companion.hours
 
-class InboundProxyWellknownIT {
+class InboundProxyIT {
 
     private lateinit var federationListCacheMock: FederationListCacheMock
 
@@ -44,8 +46,15 @@ class InboundProxyWellknownIT {
     private val externalMatrixHostname = ""
     private val matrixHttpsPort = 8090
     private val proxyInboundHostPort = 8090
-    private val endpointUrl = "http://localhost:8090/.well-known/matrix/server"
-    private val httpClient = HttpClient(Java) {
+    private val wellKnownEndpoint = "http://localhost:8090/.well-known/matrix/server"
+    private val unknownEndpoint = "http://localhost:8090/_matrix/client/v3/asdf"
+    private val pushRuleWithoutTemplateEndpoint = "http://localhost:8090/_matrix/client/v3/pushrules/global/not_a_template/foo"
+    private val httpClient = HttpClient(OkHttp) {
+        install(ContentNegotiation) {
+            json()
+        }
+        followRedirects = false
+
         install(Logging) {
             level = LogLevel.ALL
         }
@@ -84,7 +93,7 @@ class InboundProxyWellknownIT {
                     AccessTokenToUserIdImpl(inboundProxyConfig, MatrixApiClient())
                 ),
                 inboundClientRoutes = InboundClientRoutesImpl(inboundProxyConfig,logInfoConfig ,httpClient, rawDataServiceStub),
-                inboundFederationRoutes = InboundFederationRoutesImpl(                    inboundProxyConfig, httpClient, rawDataServiceStub, contactManagementServiceMock, vzdPublicIDCheckMock                ),
+                inboundFederationRoutes = InboundFederationRoutesImpl(inboundProxyConfig, httpClient, rawDataServiceStub, contactManagementServiceMock, vzdPublicIDCheckMock                ),
                 httpClient = httpClient
             ).start()
 
@@ -97,14 +106,28 @@ class InboundProxyWellknownIT {
     }
 
     @Test
-    @OptIn(ExperimentalCoroutinesApi::class)
     fun shouldReturnWellknownHostnameFromRequest() = runTest {
-        val httpClient = HttpClient()
-
-        val response = httpClient.get(endpointUrl)
+        val response = httpClient.get(wellKnownEndpoint)
 
         response.status shouldBe HttpStatusCode.OK
         response.bodyAsText() shouldBe "{\"m.server\":\"localhost:443\"}"
-        httpClient.close()
+    }
+
+    // These tests verify the changes made in the CustomMatrixServer.kt in comparison to the orginal MatrixApiServer.kt
+    @Test
+    fun shouldReturnNotFoundOnNotExistentRoute() = runTest {
+        val response = httpClient.get(unknownEndpoint)
+
+        response.status shouldBe HttpStatusCode.NotFound
+        response.bodyAsText() shouldBe "{\"errcode\":\"M_NOT_FOUND\"}"
+    }
+
+    @Test
+    fun shouldReturnBadRequestOnBadRequestException() = runTest {
+        val response = httpClient.put(pushRuleWithoutTemplateEndpoint)
+
+        response.status shouldBe HttpStatusCode.BadRequest
+        // the error message in the real application environment is "Can't transform call to resource"
+        response.bodyAsText() shouldBe "{\"errcode\":\"M_UNKNOWN\",\"error\":\"net.folivo.trixnity.core.model.push.PushRuleKind does not contain element with name 'not_a_template'\"}"
     }
 }

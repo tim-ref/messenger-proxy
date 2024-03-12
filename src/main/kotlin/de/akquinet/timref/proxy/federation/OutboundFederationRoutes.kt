@@ -6,6 +6,7 @@
 
 package de.akquinet.timref.proxy.federation
 
+import de.akquinet.timref.proxy.federation.model.route.InviteV1
 import de.akquinet.timref.proxy.forwardRequest
 import de.akquinet.timref.proxy.rawdata.RawDataService
 import de.akquinet.timref.proxy.rawdata.model.Operation
@@ -40,6 +41,7 @@ class OutboundFederationRoutesImpl(
 
     override fun Route.serverServerRawDataRoutes() {
         forwardWithRawData<Invite>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER)
+        forwardWithRawData<InviteV1>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER)
         forwardWithRawData<GetEvent>(Operation.MP_EXCHANGE_EVENT_OUTSIDE_ORGANISATION_SENDER)
         forwardEndpoint<GetWellKnown>()
     }
