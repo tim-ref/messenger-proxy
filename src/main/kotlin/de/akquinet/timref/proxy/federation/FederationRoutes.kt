@@ -6,8 +6,7 @@
 
 package de.akquinet.timref.proxy.federation
 
-import de.akquinet.timref.proxy.federation.model.route.DownloadMediaR0
-import de.akquinet.timref.proxy.federation.model.route.DownloadThumbnailR0
+import de.akquinet.timref.proxy.federation.model.route.*
 import de.akquinet.timref.proxy.forwardRequest
 import de.akquinet.timref.proxy.forwardRequestWithoutCallReceival
 import io.ktor.client.*
@@ -33,8 +32,11 @@ abstract class FederationRoutesImpl(
     override fun Route.serverServerApiRoutes() {
         forwardEndpoint<GetServerVersion>()
         forwardEndpoint<GetServerKeys>()
+        forwardEndpoint<GetServerKeyById>()
         forwardEndpoint<QueryServerKeys>()
         forwardEndpoint<QueryServerKeysByServer>()
+        forwardEndpoint<QueryServerKeyByServerAndId>()
+        forwardEndpoint<CheckPubkeyValidity>()
         forwardEndpoint<SendTransaction>()
         forwardEndpoint<GetEventAuthChain>()
         forwardEndpoint<BackfillRoom>()
@@ -43,10 +45,12 @@ abstract class FederationRoutesImpl(
         forwardEndpoint<GetStateIds>()
         forwardEndpoint<MakeJoin>()
         forwardEndpoint<SendJoin>()
+        forwardEndpoint<SendJoinV1>()
         forwardEndpoint<MakeKnock>()
         forwardEndpoint<SendKnock>()
         forwardEndpoint<MakeLeave>()
         forwardEndpoint<SendLeave>()
+        forwardEndpoint<SendLeaveV1>()
         forwardEndpoint<OnBindThirdPid>()
         forwardEndpoint<ExchangeThirdPartyInvite>()
         forwardEndpoint<GetPublicRooms>()
@@ -63,6 +67,9 @@ abstract class FederationRoutesImpl(
         forwardEndpointWithoutCallRecieval<DownloadMediaR0>()
         forwardEndpoint<DownloadThumbnail>()
         forwardEndpoint<DownloadThumbnailR0>()
+
+        // cas
+        forwardEndpoint<CasProxyValidate>()
     }
 
     private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpoint() =

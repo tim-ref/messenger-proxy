@@ -38,12 +38,11 @@ import de.akquinet.timref.proxy.logging.LogLevelService
 import de.akquinet.timref.proxy.rawdata.RawDataService
 import de.akquinet.timref.proxy.rawdata.RawDataServiceImpl
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.java.Java
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import mu.KotlinLogging
 import net.folivo.trixnity.api.client.MatrixApiClient
 import net.folivo.trixnity.core.serialization.createDefaultEventContentSerializerMappings
 import net.folivo.trixnity.core.serialization.createMatrixEventJson
@@ -56,7 +55,6 @@ import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import java.security.Security
 
-private val log = KotlinLogging.logger { }
 suspend fun main(): Unit = coroutineScope {
     // BC providers required for certificates and TLS cipher suites using brainpool curves
     Security.insertProviderAt(BouncyCastleProvider(), 1)
@@ -70,10 +68,8 @@ suspend fun main(): Unit = coroutineScope {
         .loadConfigOrThrow<ProxyConfiguration>()
 
     val koin = koinApplication {
-
         modules(
             module {
-
                 single { config }
                 single { config.federationListCache }
                 single { config.inboundProxy }
@@ -94,7 +90,7 @@ suspend fun main(): Unit = coroutineScope {
                 //DB Connection
                 DatabaseFactory.init(config.database)
 
-                val generalHttpClient = HttpClient(Java) {
+                val generalHttpClient = HttpClient(OkHttp) {
                     install(ContentNegotiation) {
                         json()
                     }
@@ -103,7 +99,7 @@ suspend fun main(): Unit = coroutineScope {
                 InterceptorInstaller(generalHttpClient).install()
 
                 single { generalHttpClient }
-                single { Java.create() } // default HttpClientEngine
+                single { OkHttp.create() } // default HttpClientEngine
                 single { MatrixApiClient() }
                 single { createMatrixEventJson() }
                 single { createDefaultEventContentSerializerMappings() }

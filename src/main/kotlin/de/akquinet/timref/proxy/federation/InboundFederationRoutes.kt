@@ -9,20 +9,26 @@ package de.akquinet.timref.proxy.federation
 import de.akquinet.timref.proxy.ProxyConfiguration
 import de.akquinet.timref.proxy.VZDPublicIDCheck
 import de.akquinet.timref.proxy.contactmgmt.database.ContactManagementService
+import de.akquinet.timref.proxy.extensions.toUriFormat
+import de.akquinet.timref.proxy.federation.model.route.InviteV1
 import de.akquinet.timref.proxy.forwardRequest
 import de.akquinet.timref.proxy.mergeToUrl
 import de.akquinet.timref.proxy.rawdata.RawDataService
 import de.akquinet.timref.proxy.rawdata.model.Operation
-import io.ktor.client.*
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
+import io.ktor.client.HttpClient
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.call
+import io.ktor.server.request.ApplicationRequest
+import io.ktor.server.request.receive
+import io.ktor.server.request.uri
+import io.ktor.server.response.respond
+import io.ktor.server.routing.Route
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import mu.KotlinLogging
 import net.folivo.trixnity.api.server.matrixEndpointResource
 import net.folivo.trixnity.core.ErrorResponse
 import net.folivo.trixnity.core.MatrixEndpoint
@@ -33,8 +39,6 @@ import net.folivo.trixnity.serverserverapi.model.federation.GetEvent
 import net.folivo.trixnity.serverserverapi.model.federation.Invite
 
 interface InboundFederationRoutes : FederationRoutes
-
-private val log = KotlinLogging.logger { }
 
 class InboundFederationRoutesImpl(
     private val config: ProxyConfiguration.InboundProxyConfiguration,
@@ -51,36 +55,60 @@ class InboundFederationRoutesImpl(
             val hostname = call.request.headers[HttpHeaders.Host]?.let { Destination.from(it) }!!.host
             call.respond(HttpStatusCode.OK, GetWellKnown.Response(server = "$hostname:${config.synapsePort}"))
         }
-        matrixEndpointResource<Invite> {
-            val request = call.receive<JsonObject>()
-            val eventJson = request["event"]?.jsonObject
-            checkNotNull(eventJson)
-            val inviter = eventJson["sender"]?.jsonPrimitive?.content?.let(::UserId)
-            val invited = eventJson["state_key"]?.jsonPrimitive?.content?.let(::UserId)
-            val membership = eventJson["content"]?.jsonObject?.get("membership")?.jsonPrimitive?.content
-            if (membership == "invite" && isInviteAllowed(inviter, invited)) {
-                forwardRequest(call, httpClient, call.request.getDestinationUrl(), request.toString())
-                    .let {
-                        rawDataService.serverRawDataForward(
-                            it.first,
-                            it.second,
-                            it.third,
-                            Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER,
-                            it.fourth
-                        )
-                    }
-            } else {
-                throw MatrixServerException(HttpStatusCode.Forbidden, ErrorResponse.Forbidden("can not invite this user"))
+        // enforceDomainList is used to turn off the invitation check mechanism ("Berechtigungsprüfung Stufe 3") for Sytest
+        // TODO https://jira.spree.de/browse/TIMREF-1772: a better alternativ to turning off the feature completely would be to start a Nginx Server that mocks
+        // the interface "/vzd/invite" of the registration service
+
+        if (!config.enforceDomainList) {
+            forwardWithRawData<Invite>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER)
+            forwardWithRawData<InviteV1>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER)
+        } else {
+            matrixEndpointResource<Invite> {
+                handleInvite(call)
+            }
+            matrixEndpointResource<InviteV1> {
+                handleInvite(call)
             }
         }
+    }
 
+    private suspend fun handleInvite(call: ApplicationCall) {
+        val requestBody = call.receive<JsonObject>()
+        val eventJson = requestBody["event"]?.jsonObject
+        checkNotNull(eventJson)
+        val inviter = eventJson["sender"]?.jsonPrimitive?.content?.let(::UserId)
+        val invited = eventJson["state_key"]?.jsonPrimitive?.content?.let(::UserId)
+        val membership = eventJson["content"]?.jsonObject?.get("membership")?.jsonPrimitive?.content
+        if (membership == "invite" && isInviteAllowed(inviter, invited)) {
+            forwardRequest(call, httpClient, call.request.getDestinationUrl(), requestBody.toString().toByteArray())
+                .let {
+                    rawDataService.serverRawDataForward(
+                        it.first,
+                        it.second,
+                        it.third,
+                        Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER,
+                        it.fourth
+                    )
+                }
+        } else {
+            throw MatrixServerException(HttpStatusCode.Forbidden, ErrorResponse.Forbidden("can not invite this user"))
+        }
     }
 
     private suspend fun isInviteAllowed(inviter: UserId?, invitedUser: UserId?): Boolean {
-        if (inviter != null && invitedUser != null && (contactManagementService.getContact(invitedUser.full, inviter.full) != null)) {
+        if (inviter != null && invitedUser != null && (contactManagementService.getContact(
+                invitedUser.full,
+                inviter.full
+            ) != null)
+        ) {
             return true
         }
-        return (inviter != null) && (invitedUser != null) && vzdPublicIDCheck.areMXIDsPublic(invited = invitedUser.full, inviter = inviter.full)
+        return (inviter != null) &&
+                (invitedUser != null) &&
+                vzdPublicIDCheck.areMXIDsPublic(
+                    invited = invitedUser.toUriFormat().full,
+                    inviter = inviter.toUriFormat().full
+                )
     }
 
     private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardWithRawData(timOperation: Operation) =

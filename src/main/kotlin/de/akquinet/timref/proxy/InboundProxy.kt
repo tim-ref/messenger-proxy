@@ -8,10 +8,12 @@ package de.akquinet.timref.proxy
 
 import de.akquinet.timref.proxy.client.AccessTokenToUserIdAuthenticationFunction
 import de.akquinet.timref.proxy.client.InboundClientRoutes
+import de.akquinet.timref.proxy.client.model.route.installPushrulesRoutesForBadRequest
 import de.akquinet.timref.proxy.federation.FederationListCache
 import de.akquinet.timref.proxy.federation.InboundFederationRoutes
 import de.akquinet.timref.proxy.federation.MatrixFederationCheckAuth.Mode.INBOUND
 import de.akquinet.timref.proxy.federation.matrixFederationCheckAuth
+import de.akquinet.timref.proxy.util.customMatrixServer
 import io.ktor.client.*
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -23,7 +25,6 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import mu.KotlinLogging
-import net.folivo.trixnity.api.server.matrixApiServer
 import net.folivo.trixnity.clientserverapi.server.ConvertMediaPlugin
 import net.folivo.trixnity.clientserverapi.server.matrixAccessTokenAuth
 import net.folivo.trixnity.core.ErrorResponse
@@ -64,7 +65,9 @@ class InboundProxyImpl(
                 }
 
 
-                matrixApiServer(json) {
+                customMatrixServer(json) {
+                    installPushrulesRoutesForBadRequest()
+
                     route("/_matrix/federation/v1/openid/userinfo") {
                         handle {
                             forwardRequest(call, httpClient, call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl), null)
@@ -74,10 +77,8 @@ class InboundProxyImpl(
                         clientServerApiRoutes()
                     }
                     authenticate("federation-check") {
-
                         inboundFederationRoutes.apply { serverServerApiRoutes() }
                         inboundFederationRoutes.apply { serverServerRawDataRoutes() }
-
                     }
 
                     route("/_synapse/admin/{...}") {
@@ -95,16 +96,11 @@ class InboundProxyImpl(
                     route("{...}") {
                         customInstallMatrixClientServerApiServer()
                         handle {
-                            if (!inboundProxyConfiguration.enforceDomainList) {
-                                forwardRequest(call, httpClient, call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl), null)
-                            } else {
-                                val requestBody = call.receive<String>()
-                                val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }
+                            val requestBody = call.receive<String>()
+                            val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }
 
-                                kLog.warn { "inbound request on unhandled path ${call.request.uri} with method ${call.request.httpMethod}, body $requestBody and headers $headerList" }
-                                kLog.debug { "inbound request on unhandled path ${call.request.uri} with method ${call.request.httpMethod}, body $requestBody and headers $headerList" }
-                                throw MatrixServerException(HttpStatusCode.NotFound, ErrorResponse.NotFound())
-                            }
+                            kLog.warn { "inbound request on unhandled path ${call.request.uri} with method ${call.request.httpMethod.value}, body $requestBody and headers $headerList" }
+                            throw MatrixServerException(HttpStatusCode.NotFound, ErrorResponse.NotFound())
                         }
                     }
                 }

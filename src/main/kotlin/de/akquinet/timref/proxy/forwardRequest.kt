@@ -7,8 +7,6 @@
 package de.akquinet.timref.proxy
 
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.apache5.Apache5
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.request.url
@@ -18,7 +16,6 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.client.utils.buildHeaders
 import io.ktor.http.*
 import io.ktor.http.content.OutgoingContent
-import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.httpMethod
@@ -35,72 +32,27 @@ import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 
 private val log = KotlinLogging.logger { }
-
-private val apacheClient = HttpClient(Apache5) {
-    install(ContentNegotiation) {
-        json()
-    }
-    followRedirects = false
-}
+private val chunkedEncodingBodyMessage = "body is empty because of chunkedTransferEncoding".toByteArray()
 
 suspend fun forwardRequest(
     call: ApplicationCall,
     httpClient: HttpClient,
     destinationUrl: Url,
-    bodyJson: String?
+    bodyJson: ByteArray?
 ): Quadruple<ApplicationRequest, HttpResponse, Long, Int> {
     val start = System.nanoTime()
-    val requestBody = bodyJson ?: call.receive<String>()
+    val requestBody = bodyJson ?: call.receive<ByteArray>()
 
     val response =
         httpClient.request {
             method = call.request.httpMethod
             url(destinationUrl)
             val requestHeaders = call.request.headers.filterUnsafeHeaders()
-            debugLog(call, destinationUrl, requestBody, requestHeaders)
+            requestLog(call, destinationUrl, requestBody, requestHeaders)
             setBody(object : OutgoingContent.ByteArrayContent() {
                 override val headers: Headers = requestHeaders
-                override fun bytes(): ByteArray = requestBody.toByteArray()
+                override fun bytes(): ByteArray = requestBody
             })
-        }
-    createResponse(response, call)
-    responseLog(call, destinationUrl, response)
-
-    return Quadruple(call.request, response, (System.nanoTime() - start) / 1000000, response.bodyAsText().length)
-}
-
-suspend fun forwardRedirect(
-    call: ApplicationCall,
-    destinationUrl: Url,
-    hostHeader: String,
-): Quadruple<ApplicationRequest, HttpResponse, Long, Int> {
-    val start = System.nanoTime()
-    val response =
-        apacheClient.request {
-            method = call.request.httpMethod
-            url(destinationUrl)
-            val requestHeaders = call.request.headers.filterUnsafeHeaders()
-            val headers = buildHeaders {
-                appendAll(requestHeaders)
-                remove(HttpHeaders.Host)
-                if (!call.request.httpVersion.contains("2"))
-                    append(HttpHeaders.Host, hostHeader)
-            }
-            debugLog(call, destinationUrl, "Could not log body", headers)
-            val requestBody = call.request.receiveChannel().toByteArray()
-            if (requestHeaders.isChunkedTransferEncoding) {
-                setBody(object : OutgoingContent.WriteChannelContent() {
-                    override val headers: Headers = headers.filterUnsafeHeaders()
-                    override suspend fun writeTo(channel: ByteWriteChannel) {
-                        call.request.receiveChannel().copyAndClose(channel)
-                    }
-                })
-            } else {
-                setBody(object : OutgoingContent.ByteArrayContent() {
-                    override val headers: Headers = headers.filterUnsafeHeaders()
-                    override fun bytes(): ByteArray = requestBody
-                })
-            }
         }
     createResponse(response, call)
     responseLog(call, destinationUrl, response)
@@ -121,8 +73,9 @@ suspend fun forwardRequestWithoutCallReceival(
             url(destinationUrl)
             val requestHeaders = call.request.headers
             val requestBody = call.request.receiveChannel().toByteArray()
-            debugLog(call, destinationUrl, "Could not log body", requestHeaders)
+
             if (requestHeaders.isChunkedTransferEncoding) {
+                requestLog(call, destinationUrl, chunkedEncodingBodyMessage, requestHeaders)
                 setBody(object : OutgoingContent.WriteChannelContent() {
                     override val headers: Headers = requestHeaders.filterUnsafeHeaders()
                     override suspend fun writeTo(channel: ByteWriteChannel) {
@@ -130,6 +83,7 @@ suspend fun forwardRequestWithoutCallReceival(
                     }
                 })
             } else {
+                requestLog(call, destinationUrl, requestBody, requestHeaders)
                 setBody(object : OutgoingContent.ByteArrayContent() {
                     override val headers: Headers = requestHeaders.filterUnsafeHeaders()
                     override fun bytes(): ByteArray = requestBody
@@ -168,15 +122,14 @@ suspend fun responseLog(call: ApplicationCall, destinationUrl: Url, response: Ht
     launch {
         val responseBody = response.bodyAsText()
         log.debug {
-            "Response to Request from ${call.request.uri} to $destinationUrl with body: $responseBody and headers: ${response.headers.entries().map { "${it.key}: ${it.value}" }}"
+            "Response to Request from ${call.request.uri} \nto $destinationUrl \nwith headers: ${response.headers.entries().map { "${it.key}: ${it.value}" }} \nand body: $responseBody \nresponse status: ${response.status.value}"
         }
     }
 }
 
-private fun debugLog(call: ApplicationCall, destinationUrl: Url, requestBody: String, requestHeaders: Headers) {
+private fun requestLog(call: ApplicationCall, destinationUrl: Url, requestBody: ByteArray, requestHeaders: Headers) {
     log.debug {
-        "Received ${call.request.httpMethod}-Request with ${call.request.httpVersion} to $destinationUrl with body: $requestBody and headers:" +
-                " ${requestHeaders.entries().map { "${it.key}: ${it.value}" }}"
+        "Received ${call.request.httpMethod.value}-Request with ${call.request.httpVersion} \nto $destinationUrl \nwith headers: ${requestHeaders.entries().map { "${it.key}: ${it.value}" }} \nand body: $requestBody"
     }
 }
 

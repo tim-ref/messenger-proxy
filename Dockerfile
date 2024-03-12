@@ -10,7 +10,7 @@ LABEL maintainer="TIMREF Maintainers"
 
 ARG JAR_FILE
 
-COPY $JAR_FILE /app/messenger-proxy-all.jar
+COPY $JAR_FILE /app/mp-backend-jar-with-dependencies.jar
 COPY java.security /app
 
 ENTRYPOINT ["java", \
@@ -18,5 +18,5 @@ ENTRYPOINT ["java", \
     "-Djdk.tls.namedGroups=brainpoolP384r1tls13,brainpoolP256r1tls13,brainpoolP384r1,brainpoolP256r1,secp384r1,secp256r1", \
     "-Dsun.security.ssl.allowLegacyHelloMessages=false", \
     "-jar", \
-    "/app/messenger-proxy-all.jar" \
+    "/app/mp-backend-jar-with-dependencies.jar" \
 ]

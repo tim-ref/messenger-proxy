@@ -26,7 +26,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.engine.java.Java
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.get
@@ -63,7 +63,7 @@ class ActuatorRoutesIT {
     private val proxyOutboundHostPort = 8558
     private val healthBaseUrl = "http://localhost:1233/actuator/health/"
     private val loggingBaseUrl = "http://localhost:1233/actuator/logging"
-    private val httpClient = HttpClient(Java) {
+    private val httpClient = HttpClient(OkHttp) {
         install(Logging) {
             level = LogLevel.ALL
         }

@@ -7,11 +7,16 @@
 package de.akquinet.timref.proxy.client
 
 import de.akquinet.timref.proxy.ProxyConfiguration
-import de.akquinet.timref.proxy.client.model.route.RoomJoin
-import de.akquinet.timref.proxy.client.model.route.SsoCallback
-import de.akquinet.timref.proxy.client.model.route.SsoLogin
-import de.akquinet.timref.proxy.client.model.route.SsoLoginOIDC
-import de.akquinet.timref.proxy.forwardRedirect
+import de.akquinet.timref.proxy.client.model.route.*
+import de.akquinet.timref.proxy.client.model.route.ChangeVisibilityAppServiceRoom
+import de.akquinet.timref.proxy.client.model.route.cas.CasRedirect
+import de.akquinet.timref.proxy.client.model.route.cas.CasTicket
+import de.akquinet.timref.proxy.client.model.route.pushrules.GetPushRuleWithoutId
+import de.akquinet.timref.proxy.client.model.route.pushrules.GetPushRulesForScope
+import de.akquinet.timref.proxy.client.model.route.thirdparty.GetLocationFromThirdParty
+import de.akquinet.timref.proxy.client.model.route.thirdparty.GetThirdPartyProtocolByName
+import de.akquinet.timref.proxy.client.model.route.thirdparty.GetThirdPartyProtocols
+import de.akquinet.timref.proxy.client.model.route.thirdparty.GetUserFromThirdParty
 import de.akquinet.timref.proxy.forwardRequest
 import de.akquinet.timref.proxy.forwardRequestWithoutCallReceival
 import de.akquinet.timref.proxy.mergeToUrl
@@ -21,35 +26,13 @@ import io.ktor.client.HttpClient
 import io.ktor.http.Url
 import io.ktor.server.application.call
 import io.ktor.server.request.ApplicationRequest
-import io.ktor.server.request.host
 import io.ktor.server.request.receive
 import io.ktor.server.request.uri
 import io.ktor.server.routing.Route
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import mu.KotlinLogging
 import net.folivo.trixnity.api.server.matrixEndpointResource
-import net.folivo.trixnity.clientserverapi.model.authentication.AddThirdPartyIdentifiers
-import net.folivo.trixnity.clientserverapi.model.authentication.BindThirdPartyIdentifiers
-import net.folivo.trixnity.clientserverapi.model.authentication.ChangePassword
-import net.folivo.trixnity.clientserverapi.model.authentication.DeactivateAccount
-import net.folivo.trixnity.clientserverapi.model.authentication.DeleteThirdPartyIdentifiers
-import net.folivo.trixnity.clientserverapi.model.authentication.GetEmailRequestTokenForPassword
-import net.folivo.trixnity.clientserverapi.model.authentication.GetEmailRequestTokenForRegistration
-import net.folivo.trixnity.clientserverapi.model.authentication.GetLoginTypes
-import net.folivo.trixnity.clientserverapi.model.authentication.GetMsisdnRequestTokenForPassword
-import net.folivo.trixnity.clientserverapi.model.authentication.GetMsisdnRequestTokenForRegistration
-import net.folivo.trixnity.clientserverapi.model.authentication.GetOIDCRequestToken
-import net.folivo.trixnity.clientserverapi.model.authentication.GetThirdPartyIdentifiers
-import net.folivo.trixnity.clientserverapi.model.authentication.IsRegistrationTokenValid
-import net.folivo.trixnity.clientserverapi.model.authentication.IsUsernameAvailable
-import net.folivo.trixnity.clientserverapi.model.authentication.Login
-import net.folivo.trixnity.clientserverapi.model.authentication.Logout
-import net.folivo.trixnity.clientserverapi.model.authentication.LogoutAll
-import net.folivo.trixnity.clientserverapi.model.authentication.Refresh
-import net.folivo.trixnity.clientserverapi.model.authentication.Register
-import net.folivo.trixnity.clientserverapi.model.authentication.UnbindThirdPartyIdentifiers
-import net.folivo.trixnity.clientserverapi.model.authentication.WhoAmI
+import net.folivo.trixnity.clientserverapi.model.authentication.*
 import net.folivo.trixnity.clientserverapi.model.devices.DeleteDevice
 import net.folivo.trixnity.clientserverapi.model.devices.DeleteDevices
 import net.folivo.trixnity.clientserverapi.model.devices.GetDevice
@@ -81,17 +64,7 @@ import net.folivo.trixnity.clientserverapi.model.media.DownloadThumbnail
 import net.folivo.trixnity.clientserverapi.model.media.GetMediaConfig
 import net.folivo.trixnity.clientserverapi.model.media.GetUrlPreview
 import net.folivo.trixnity.clientserverapi.model.media.UploadMedia
-import net.folivo.trixnity.clientserverapi.model.push.DeletePushRule
-import net.folivo.trixnity.clientserverapi.model.push.GetNotifications
-import net.folivo.trixnity.clientserverapi.model.push.GetPushRule
-import net.folivo.trixnity.clientserverapi.model.push.GetPushRuleActions
-import net.folivo.trixnity.clientserverapi.model.push.GetPushRuleEnabled
-import net.folivo.trixnity.clientserverapi.model.push.GetPushRules
-import net.folivo.trixnity.clientserverapi.model.push.GetPushers
-import net.folivo.trixnity.clientserverapi.model.push.SetPushRule
-import net.folivo.trixnity.clientserverapi.model.push.SetPushRuleActions
-import net.folivo.trixnity.clientserverapi.model.push.SetPushRuleEnabled
-import net.folivo.trixnity.clientserverapi.model.push.SetPushers
+import net.folivo.trixnity.clientserverapi.model.push.*
 import net.folivo.trixnity.clientserverapi.model.rooms.BanUser
 import net.folivo.trixnity.clientserverapi.model.rooms.CreateRoom
 import net.folivo.trixnity.clientserverapi.model.rooms.DeleteRoomAlias
@@ -116,7 +89,6 @@ import net.folivo.trixnity.clientserverapi.model.rooms.GetRoomAliases
 import net.folivo.trixnity.clientserverapi.model.rooms.GetRoomTags
 import net.folivo.trixnity.clientserverapi.model.rooms.GetState
 import net.folivo.trixnity.clientserverapi.model.rooms.GetStateEvent
-import net.folivo.trixnity.clientserverapi.model.rooms.InviteUser
 import net.folivo.trixnity.clientserverapi.model.rooms.JoinRoom
 import net.folivo.trixnity.clientserverapi.model.rooms.KickUser
 import net.folivo.trixnity.clientserverapi.model.rooms.KnockRoom
@@ -158,8 +130,6 @@ interface InboundClientRoutes {
     fun Route.clientServerApiRoutes()
 }
 
-private val log = KotlinLogging.logger { }
-
 class InboundClientRoutesImpl(
     private val config: ProxyConfiguration.InboundProxyConfiguration,
     private val logConfiguration: ProxyConfiguration.LogInfoConfig,
@@ -178,12 +148,14 @@ class InboundClientRoutesImpl(
         forwardEndpoint<GetEmailRequestTokenForRegistration>()
         forwardEndpoint<GetMsisdnRequestTokenForPassword>()
         forwardEndpoint<GetMsisdnRequestTokenForRegistration>()
+        forwardEndpoint<GetEmailRequestTokenFor3Pid>()
         forwardEndpoint<Register>()
         forwardWithRawData<Login>(Operation.MP_CLIENT_LOGIN_REQUEST_ACCESS_TOKEN)
         forwardWithRawData<GetLoginTypes>(Operation.MP_CLIENT_LOGIN_SUPPORTED_LOGIN_TYPES)
-        forwardEndpointWithRedirect<SsoLoginOIDC>()
-        forwardEndpointWithRedirect<SsoLogin>()
-        forwardEndpointWithRedirect<SsoCallback>()
+        forwardEndpoint<SSORedirectTo>()
+        forwardEndpoint<SSORedirect>()
+        forwardEndpoint<CasRedirect>()
+        forwardEndpoint<SsoCallback>()
         forwardWithRawData<GetOIDCRequestToken>(Operation.MP_CLIENT_LOGIN_REQUEST_OPENID_TOKEN)
         forwardEndpoint<Logout>()
         forwardEndpoint<LogoutAll>()
@@ -240,7 +212,9 @@ class InboundClientRoutesImpl(
         forwardEndpoint<SetPushers>()
         forwardEndpoint<GetNotifications>()
         forwardEndpoint<GetPushRules>()
+        forwardEndpoint<GetPushRulesForScope>()
         forwardEndpoint<GetPushRule>()
+        forwardEndpoint<GetPushRuleWithoutId>()
         forwardEndpoint<SetPushRule>()
         forwardEndpoint<DeletePushRule>()
         forwardEndpoint<GetPushRuleActions>()
@@ -269,20 +243,17 @@ class InboundClientRoutesImpl(
         forwardWithRawData<DeleteRoomAlias>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<GetJoinedRooms>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
 
-        matrixEndpointResource<InviteUser> {
-            val request = call.receive<JsonObject>()
-            val eventJson = request["user_id"]
-            checkNotNull(eventJson)
-            forwardRequest(call, httpClient, call.request.getDestinationUrl(), request.toString()).let {
+        matrixEndpointResource<InviteUserWith3pidOption> {
+            val requestBody = call.receive<JsonObject>()
+            val userId = requestBody["user_id"]
+            forwardRequest(call, httpClient, call.request.getDestinationUrl(), requestBody.toString().toByteArray()).let {
                 rawDataService.serverRawDataForward(
                     it.first, it.second, it.third,
-                    if (eventJson.jsonPrimitive.content.contains(logConfiguration.homeFQDN)) Operation.MP_INVITE_WITHIN_ORGANISATION_INVITE else Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER,
+                    if (userId?.jsonPrimitive?.content?.contains(logConfiguration.homeFQDN) == true) Operation.MP_INVITE_WITHIN_ORGANISATION_INVITE else Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER,
                     it.fourth
                 )
             }
-
         }
-
 
         forwardWithRawData<KickUser>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<BanUser>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
@@ -319,6 +290,7 @@ class InboundClientRoutesImpl(
 
         // sync
         forwardEndpoint<Sync>()
+        forwardEndpoint<EventsR0>()
 
         // users
         forwardEndpoint<GetDisplayName>()
@@ -334,6 +306,18 @@ class InboundClientRoutesImpl(
         forwardEndpoint<GetGlobalAccountData>()
         forwardEndpoint<SetGlobalAccountData>()
         forwardWithRawData<SearchUsers>(Operation.MP_INVITE_WITHIN_ORGANISATION_SEARCH)
+
+        // third party protocols
+        forwardEndpoint<GetThirdPartyProtocols>()
+        forwardEndpoint<GetThirdPartyProtocolByName>()
+        forwardEndpoint<GetUserFromThirdParty>()
+        forwardEndpoint<GetLocationFromThirdParty>()
+
+        // app service
+        forwardEndpoint<ChangeVisibilityAppServiceRoom>()
+
+        // cas
+        forwardEndpoint<CasTicket>()
     }
 
     private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardWithRawData(timOperation: Operation) = matrixEndpointResource<ENDPOINT> {
@@ -347,12 +331,6 @@ class InboundClientRoutesImpl(
     private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpoint() {
         matrixEndpointResource<ENDPOINT> {
             forwardRequest(call, httpClient, call.request.uri.mergeToUrl(config.homeserverUrl), null)
-        }
-    }
-
-    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpointWithRedirect() {
-        matrixEndpointResource<ENDPOINT> {
-            forwardRedirect(call, call.request.uri.mergeToUrl(config.homeserverUrl), call.request.host())
         }
     }
 
