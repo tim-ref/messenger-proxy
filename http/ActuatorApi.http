@@ -16,4 +16,4 @@ PUT http://localhost:1233/actuator/logging/TRACE
 
 
 ###
-PUT http://localhost:1233/actuator/logging/OFF/de.akquinet.timref.proxy.FileCache
+PUT http://localhost:1233/actuator/logging/OFF/de.akquinet.tim.proxy.FileCache

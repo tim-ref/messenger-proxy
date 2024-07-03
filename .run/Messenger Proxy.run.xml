@@ -9,7 +9,7 @@
     <envs>
       <env name="CONFIGURATION_FILE_PATH" value="/app/resources/application-local.yml" />
     </envs>
-    <option name="MAIN_CLASS_NAME" value="de.akquinet.timref.proxy.MainKt" />
+    <option name="MAIN_CLASS_NAME" value="de.akquinet.tim.proxy.MainKt" />
     <module name="mp-backend" />
     <shortenClasspath name="NONE" />
     <method v="2">
