@@ -77,7 +77,7 @@ abstract class FileCacheImpl<T>(
         data class Error<T>(val message: String) : RequestFileResult<T>
     }
 
-    abstract fun nextUpdate(lastWasError: Boolean): Instant
+    abstract fun nextUpdate(): Instant
     abstract suspend fun parseFile(content: String): T
     abstract suspend fun requestFile(version: String?): RequestFileResult<T>
 
@@ -89,13 +89,11 @@ abstract class FileCacheImpl<T>(
     }
 
 
-    private fun saveMeta(etag: String?, lastWasError: Boolean = false) {
+    private fun saveMeta(etag: String?) {
         fileSystem.write(metaFile) {
             writeUtf8(Json.encodeToString(
                 FileCacheMeta(
-                    nextUpdate(
-                        lastWasError
-                    ), etag ?: ""
+                    nextUpdate(), etag ?: ""
                 )
             ))
         }
@@ -132,7 +130,7 @@ abstract class FileCacheImpl<T>(
             }
 
             is RequestFileResult.Error -> {
-                saveMeta(meta?.version, true)
+                saveMeta(meta?.version)
                 log.error { "$file could not be updated: ${requestFileResult.message}" }
             }
         }

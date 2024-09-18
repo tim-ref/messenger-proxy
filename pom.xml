@@ -10,7 +10,7 @@
 
     <groupId>de.akquinet.timref.fachdienst.messenger-proxy</groupId>
     <artifactId>mp-backend</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
 
     <name>Messenger-Proxy</name>
     <description>Messenger-Proxy für die TIM Referenzimplementierung</description>
@@ -291,6 +291,12 @@
         <dependency>
             <groupId>io.kotest</groupId>
             <artifactId>kotest-assertions-core-jvm</artifactId>
+            <version>${kotest.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.kotest</groupId>
+            <artifactId>kotest-assertions-json-jvm</artifactId>
             <version>${kotest.version}</version>
             <scope>test</scope>
         </dependency>
@@ -743,13 +749,16 @@
                                             <files>
                                                 <file>${project.basedir}/LICENSE.txt</file>
                                             </files>
-                                            <message>A file LICENSE.txt is required in this project's base directory.</message>
+                                            <message>A file LICENSE.txt is required in this project's base directory.
+                                            </message>
                                         </requireFilesExist>
                                         <requireFileChecksum>
                                             <file>${project.basedir}/LICENSE.txt</file>
                                             <checksum>3b83ef96387f14655fc854ddc3c6bd57</checksum>
                                             <type>md5</type>
-                                            <message>The file LICENSE.txt must contain the content of https://www.apache.org/licenses/LICENSE-2.0.txt.</message>
+                                            <message>The file LICENSE.txt must contain the content of
+                                                https://www.apache.org/licenses/LICENSE-2.0.txt.
+                                            </message>
                                         </requireFileChecksum>
                                     </rules>
                                     <fail>true</fail>
@@ -872,7 +881,7 @@
     <scm>
         <connection>${env.CI_SCM_CONNECTION}</connection>
         <developerConnection>${env.CI_SCM_DEVELOPER_CONNECTION}</developerConnection>
-        <tag>0.2.0</tag>
+        <tag>0.3.0</tag>
         <url>${env.CI_SCM_URL}</url>
     </scm>
 </project>

@@ -50,8 +50,9 @@ class FileCacheIT {
     private val baseDirectory = "federationList"
     private val filePath  = "federationList/federationList.json"
     private val metaFilePath = "federationList/federationList-meta.json"
+    private val updateIntervalMinutes=1
     private val fakeFileSystem = FakeFileSystem()
-    private val federationListConfig = ProxyConfiguration.FederationListCacheConfiguration(baseDirectory, filePath, metaFilePath)
+    private val federationListConfig = ProxyConfiguration.FederationListCacheConfiguration(baseDirectory, filePath, metaFilePath,updateIntervalMinutes)
     private val responseString = """{
                                       "version": 0,
                                       "domainList": [

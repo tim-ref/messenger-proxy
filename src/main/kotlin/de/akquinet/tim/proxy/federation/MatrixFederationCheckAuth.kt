@@ -83,8 +83,8 @@ class MatrixFederationCheckAuth internal constructor(
                         )
 
                     InvalidCredentials -> challengeCall.respond<ErrorResponse>(
-                        HttpStatusCode.Unauthorized,
-                        ErrorResponse.Unauthorized("not part of federation")
+                        HttpStatusCode.Forbidden,
+                        ErrorResponse.Forbidden("not part of federation")
                     )
 
                     is Error -> challengeCall.respond<ErrorResponse>(

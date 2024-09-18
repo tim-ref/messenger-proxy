@@ -25,7 +25,7 @@ COPY config/local-docker/* /data/
 # Copy entrypoint scripts
 COPY ./entrypoint-wrapper.sh /entrypoint-wrapper.sh
 COPY ./wait-for.sh /wait-for.sh
-COPY ./add-admin.sh /add-admin.sh
+COPY ./add-initial-users.sh /add-initial-users.sh
 COPY ./test-db.py /test-db.py
 
 ENTRYPOINT "/entrypoint-wrapper.sh"

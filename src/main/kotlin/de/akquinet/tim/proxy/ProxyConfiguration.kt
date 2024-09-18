@@ -33,6 +33,7 @@ data class ProxyConfiguration(
         val baseDirectory: String,
         val file: String,
         val metaFile: String,
+        val updateIntervalMinutes: Int
     )
 
     data class InboundProxyConfiguration(

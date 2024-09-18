@@ -14,4 +14,10 @@ echo "[+] waiting for synapse to start"
 echo "[+] adding admin user"
 register_new_matrix_user $SERVER -u "$SYNAPSE_ADMIN_USER" -p "$SYNAPSE_ADMIN_PASSWORD" -a -c /data/homeserver.yaml
 
+if [ -n "$SYNAPSE_TEST_USER" ] && [ -n "$SYNAPSE_TEST_PASSWORD" ]; then
+  echo "[+] adding test user"
+  register_new_matrix_user $SERVER -u "$SYNAPSE_TEST_USER" -p "$SYNAPSE_TEST_PASSWORD" -c /data/homeserver.yaml --no-admin
+else
+  echo "[+] test user creation is skipped due to missing variables."
+fi
 echo "[+] finished configuration"

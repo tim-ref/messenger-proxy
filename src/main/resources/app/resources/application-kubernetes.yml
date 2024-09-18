@@ -28,6 +28,7 @@ federationListCache:
   baseDirectory: "federationList"
   file: "federationList/federationList.json"
   metaFile: "federationList/federationList-meta.json"
+  updateIntervalMinutes: ${FL_CACHE_UPDATE_INTERVAL_MINUTES:-1}
 
 inboundProxy:
   homeserverUrl: ${HOMESERVER_URL}

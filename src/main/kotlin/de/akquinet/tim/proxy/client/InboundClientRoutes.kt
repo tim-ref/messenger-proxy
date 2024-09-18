@@ -16,13 +16,10 @@
 
 package de.akquinet.tim.proxy.client
 
-import de.akquinet.tim.proxy.ProxyConfiguration
+import de.akquinet.tim.proxy.*
 import de.akquinet.tim.proxy.client.model.route.GetThirdPartyProtocols
 import de.akquinet.tim.proxy.client.model.route.RoomJoin
 import de.akquinet.tim.proxy.client.model.route.SsoCallback
-import de.akquinet.tim.proxy.forwardRequest
-import de.akquinet.tim.proxy.forwardRequestWithoutCallReceival
-import de.akquinet.tim.proxy.mergeToUrl
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.model.Operation
 import de.akquinet.tim.proxy.client.model.route.ChangeVisibilityAppServiceRoom
@@ -37,12 +34,11 @@ import de.akquinet.tim.proxy.client.model.route.thirdparty.GetLocationFromThirdP
 import de.akquinet.tim.proxy.client.model.route.thirdparty.GetThirdPartyProtocolByName
 import de.akquinet.tim.proxy.client.model.route.thirdparty.GetUserFromThirdParty
 import io.ktor.client.HttpClient
-import io.ktor.http.Url
+import io.ktor.http.*
 import io.ktor.server.application.call
-import io.ktor.server.request.ApplicationRequest
-import io.ktor.server.request.receive
-import io.ktor.server.request.uri
+import io.ktor.server.request.*
 import io.ktor.server.routing.Route
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import net.folivo.trixnity.api.server.matrixEndpointResource
@@ -170,7 +166,9 @@ import net.folivo.trixnity.clientserverapi.model.users.SetDisplayName
 import net.folivo.trixnity.clientserverapi.model.users.SetFilter
 import net.folivo.trixnity.clientserverapi.model.users.SetGlobalAccountData
 import net.folivo.trixnity.clientserverapi.model.users.SetPresence
+import net.folivo.trixnity.core.ErrorResponse
 import net.folivo.trixnity.core.MatrixEndpoint
+import net.folivo.trixnity.core.MatrixServerException
 
 fun interface InboundClientRoutes {
     fun Route.clientServerApiRoutes()
@@ -378,7 +376,7 @@ class InboundClientRoutesImpl(
         forwardEndpoint<SetAvatarUrl>()
         forwardEndpoint<GetProfile>()
         forwardEndpoint<GetPresence>()
-        forwardEndpoint<SetPresence>()
+        setPresence()
         forwardEndpoint<SendToDevice>()
         forwardEndpoint<GetFilter>()
         forwardEndpoint<SetFilter>()
@@ -404,7 +402,12 @@ class InboundClientRoutesImpl(
         matrixEndpointResource<InviteUserWith3pidOption> {
             val requestBody = call.receive<JsonObject>()
             val userId = requestBody["user_id"]
-            forwardRequest(call, httpClient, call.request.getDestinationUrl(), requestBody.toString().toByteArray()).let {
+            forwardRequest(
+                call,
+                httpClient,
+                call.request.getDestinationUrl(),
+                requestBody.toString().toByteArray()
+            ).let {
                 rawDataService.serverRawDataForward(
                     it.first, it.second, it.third,
                     if (userId?.jsonPrimitive?.content?.contains(logConfiguration.homeFQDN) == true) {
@@ -415,6 +418,23 @@ class InboundClientRoutesImpl(
                     it.fourth
                 )
             }
+        }
+    }
+
+    private fun Route.setPresence() {
+        matrixEndpointResource<SetPresence> {
+            val requestBody = call.receiveText()
+            val request = Json.decodeFromString<JsonObject>(requestBody)
+            val statusMsg = request["status_msg"]?.jsonPrimitive?.content
+            val preConditionFailed = statusMsg?.let { it.length > 250 } ?: false
+
+
+            if (preConditionFailed) {
+                throw MatrixServerException(HttpStatusCode.Forbidden, ErrorResponse.Forbidden())
+            }
+
+            forwardRequest(call, httpClient, call.request.getDestinationUrl(), requestBody.toByteArray())
+
         }
     }
 

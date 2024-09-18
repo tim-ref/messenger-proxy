@@ -16,15 +16,14 @@
 
 package de.akquinet.tim.proxy.transformer
 
-import com.google.gson.Gson
 import de.akquinet.tim.proxy.client.model.MatrixVersion
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.InvalidBodyException
-import io.ktor.util.toByteArray
-import io.ktor.utils.io.ByteReadChannel
-import io.ktor.utils.io.core.ByteReadPacket
-import io.ktor.utils.io.core.readBytes
-import io.ktor.utils.io.core.toByteArray
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.util.*
+import io.ktor.utils.io.*
+import io.ktor.utils.io.core.*
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import net.folivo.trixnity.clientserverapi.model.server.GetVersions
 
 object GetVersionsTransformer : BodyTransformer {
@@ -42,13 +41,13 @@ object GetVersionsTransformer : BodyTransformer {
             is ByteReadPacket -> body.readBytes()
             else -> throw InvalidBodyException(errorMessage)
         }
-        val originalVersions = Gson().fromJson(bytes.decodeToString(), GetVersions.Response::class.java)
+        val originalVersions = Json.decodeFromString<GetVersions.Response>(bytes.decodeToString())
         val maxVersion = MatrixVersion("v1.3")
         val filteredVersions = originalVersions.versions
             .map { MatrixVersion(it) }
             .filter { it <= maxVersion }
 
-        val newBody = Gson().toJson(
+        val newBody = Json.encodeToString(
             GetVersions.Response(
                 versions = filteredVersions.sorted().map { it.version },
                 unstableFeatures = originalVersions.unstableFeatures

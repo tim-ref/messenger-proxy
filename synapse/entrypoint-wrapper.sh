@@ -17,6 +17,6 @@ echo "[+] waiting for db to start"
 /start.py "$@" &
 
 # Start the helper process
-/add-admin.sh "$@" &
+/add-initial-users.sh "$@" &
 
 fg %1

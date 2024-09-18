@@ -218,8 +218,8 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         should("deny unfederated domain") {
             withCut {
                 val response = client.postKeyClaimAuthenticated()
-                response.status shouldBe HttpStatusCode.Unauthorized
-                response.bodyAsText() shouldBe """{"errcode":"M_UNAUTHORIZED","error":"not part of federation"}"""
+                response.status shouldBe HttpStatusCode.Forbidden
+                response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"not part of federation"}"""
             }
         }
     }

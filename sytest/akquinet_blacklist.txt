@@ -1,0 +1,185 @@
+#### Akquinet Blacklist ####
+
+# test fails url_preview_enabled is set to false
+Test URL preview
+
+# test fail because encryption_enabled_by_default_for_room_type is set to "all"
+The only membership state included in an incremental sync is for senders in the timeline
+
+# tests fail because user_directory->search_all_users ist set to true
+User in private room doesn't appear in user directory
+User joining then leaving public room appears and dissappears from directory
+Users appear/disappear from directory when join_rules are changed
+Users appear/disappear from directory when history_visibility are changed
+Users stay in directory when join_rules are changed but history_visibility is world_readable
+User directory correctly update on display name change
+User in shared private room does appear in user directory until leave
+
+# test fail because allow_public_rooms_over_federation and allow_public_rooms_without_auth are set to false
+GET /publicRooms lists newly-created room
+GET /publicRooms lists rooms
+GET /publicRooms includes avatar URLs
+Name/topic keys are correct
+Can get remote public room list
+Inbound federation can get public room list
+Federation publicRoom Name/topic keys are correct
+
+# tests fail because enable_ephemeral_messages is per default set to false
+Ephemeral messages received from clients are correctly expired
+Ephemeral messages received from servers are correctly expired
+
+# tests fail because allow_guest_access is set to false
+Guest user cannot call /events globally
+Guest users can join guest_access rooms
+Guest users can send messages to guest_access rooms if joined
+Guest user calling /events doesn't tightloop
+Guest users are kicked from guest_access rooms on revocation of guest_access
+Guest user can set display names
+Guest users are kicked from guest_access rooms on revocation of guest_access over federation
+Guest user can upgrade to fully featured user
+Guest user cannot upgrade other users
+Guest users denied access over federation if guest access prohibited
+m.room.history_visibility == "world_readable" allows/forbids appropriately for Guest users
+m.room.history_visibility == "shared" allows/forbids appropriately for Guest users
+m.room.history_visibility == "invited" allows/forbids appropriately for Guest users
+m.room.history_visibility == "joined" allows/forbids appropriately for Guest users
+m.room.history_visibility == "default" allows/forbids appropriately for Guest users
+Guest non-joined user cannot call /events on shared room
+Guest non-joined user cannot call /events on invited room
+Guest non-joined user cannot call /events on joined room
+Guest non-joined user cannot call /events on default room
+Guest non-joined user can call /events on world_readable room
+Guest non-joined users can get state for world_readable rooms
+Guest non-joined users can get individual state for world_readable rooms
+Guest non-joined users cannot room initalSync for non-world_readable rooms
+Guest non-joined users can room initialSync for world_readable rooms
+Guest non-joined users can get individual state for world_readable rooms after leaving
+Guest non-joined users cannot send messages to guest_access rooms if not joined
+Guest users can sync from world_readable guest_access rooms if joined
+Guest users can sync from shared guest_access rooms if joined
+Guest users can sync from invited guest_access rooms if joined
+Guest users can sync from joined guest_access rooms if joined
+Guest users can sync from default guest_access rooms if joined
+Real non-joined users cannot room initalSync for non-world_readable rooms
+Real non-joined users can room initialSync for world_readable rooms
+Guest user can call /events on another world_readable room (SYN-606)
+
+# tests fail because /_matrix/client/v3/initialSync is not supported by messenger proxy
+# endpoint is deprecated and will be removed: https://spec.matrix.org/v1.3/client-server-api/#get_matrixclientv3initialsync
+GET /initialSync initially
+A departed room is still included in /initialSync (SPEC-216)
+Read receipts are visible to /initialSync
+Tags appear in the v1 /initialSync
+Latest account data comes down in /initialSync
+
+# tests fail because /_matrix/client/v3/rooms/{roomId}/initialSync is not supported by messenger proxy
+# endpoint is deprecated and will be removed: https://spec.matrix.org/v1.3/client-server-api/#get_matrixclientv3roomsroomidinitialsync
+GET /rooms/:room_id/initialSync fetches initial sync state
+Can get rooms/{roomId}/initialSync for a departed room (SPEC-216)
+Real non-joined user can call /events on world_readable room
+Tags appear in the v1 room initial sync
+Latest account data comes down in room initialSync
+Real user can call /events on another world_readable room (SYN-606)
+
+# tests fail because endpoint POST /_matrix/client/v3/rooms/{roomId}/send/{eventType} is unspecced
+# see here: https://github.com/element-hq/synapse/issues/12375, https://github.com/matrix-org/sytest/issues/878
+POST /rooms/:room_id/send/:event_type sends a message
+AS-ghosted users can use rooms via AS
+Event size limits
+Invalid JSON integers
+Invalid JSON floats
+Invalid JSON special values
+
+# tests fail because endpoint POST /_matrix/client/v3/rooms/{roomId}/redact/{eventId} is unspecced
+# see here: https://github.com/element-hq/synapse/issues/12362
+Can receive redactions from regular users over federation in room version 1
+Can receive redactions from regular users over federation in room version 2
+Can receive redactions from regular users over federation in room version 3
+Can receive redactions from regular users over federation in room version 4
+Can receive redactions from regular users over federation in room version 5
+Can receive redactions from regular users over federation in room version 6
+Can receive redactions from regular users over federation in room version 7
+Can receive redactions from regular users over federation in room version 8
+Can receive redactions from regular users over federation in room version 9
+Can receive redactions from regular users over federation in room version 10
+Can receive redactions from regular users over federation in room version 11
+
+# test fails because they rely on an unstable api
+# /_matrix/client/unstable/registration/email/submit_token
+Can register using an email address
+# /_matrix/client/unstable/keys/device_signing/upload
+Can upload self-signing keys
+# /_matrix/client/unstable/keys/device_signing/upload
+uploading signed devices gets propagated over federation
+# /_matrix/client/unstable/account/3pid/bind
+Can bind 3PID via home server
+# /_matrix/client/unstable/account/3pid/bind
+Can bind and unbind 3PID via homeserver
+# /_matrix/client/unstable/account/3pid/bind
+3PIDs are unbound after account deactivation
+# /_matrix/client/unstable/account/3pid/bind
+Can bind and unbind 3PID via /unbind by specifying the identity server
+# /_matrix/client/unstable/account/3pid/bind
+Can bind and unbind 3PID via /unbind without specifying the identity server
+# /_matrix/client/unstable/add_threepid/email/submit_token
+Can login with 3pid and password using m.login.password
+
+# tests fail because endpoint POST /_matrix/federation/v1/3pid/onbind is unspecced, correct would be PUT
+# this issue is mentioned here: https://github.com/matrix-org/synapse/issues/8334
+Can invite unbound 3pid
+Can invite unbound 3pid over federation
+Can invite unbound 3pid with no ops into a private room
+Can invite unbound 3pid over federation with no ops into a private room
+Can invite unbound 3pid over federation with users from both servers
+Can accept unbound 3pid invite after inviter leaves
+
+# tests fail because the param event_id is marked as required param in the "GetState" and "GetStateIds" resources of Trixnity
+# omitting them like in these tests leads to a 404 response status returned by the proxy
+# this is the general behavior of the proxy when required parameters are missing and is caused by the Ktor framework used
+Inbound federation of state requires event_id as a mandatory paramater
+Inbound federation of state_ids requires event_id as a mandatory paramater
+
+# tests fail because endpoint DELETE /_matrix/client/v3/directory/list/appservice/{networkId}/{roomId} is unspecced
+AS can publish rooms in their own list
+AS and main public room lists are separate
+
+# Flaky as of https://github.com/matrix-org/sytest/issues/1364
+If a device list update goes missing, the server resyncs on the next one
+
+#### Synapse Blacklist ####
+
+# from https://github.com/matrix-org/synapse/blob/develop/sytest-blacklist
+#
+# This file serves as a blacklist for SyTest tests that we expect will fail in
+# Synapse. This doesn't include flakey tests---better to deflake them instead.
+#
+# Each line of this file is scanned by sytest during a run and if the line
+# exactly matches the name of a test, it will be marked as "expected fail",
+# meaning the test will still run, but failure will not mark the entire test
+# suite as failing.
+#
+# Test names are encouraged to have a bug accompanied with them, serving as an
+# explanation for why the test has been excluded.
+
+# Blacklisted due to https://github.com/matrix-org/synapse/issues/2065
+Guest users can accept invites to private rooms over federation
+
+# Blacklisted due to https://github.com/vector-im/riot-web/issues/7211
+The only membership state included in a gapped incremental sync is for senders in the timeline
+
+# Blacklisted due to https://github.com/matrix-org/synapse/issues/1658
+Newly created users see their own presence in /initialSync (SYT-34)
+
+# Blacklisted due to https://github.com/matrix-org/synapse/issues/1396
+Should reject keys claiming to belong to a different user
+
+# Blacklisted until MSC2753 is implemented
+Local users can peek into world_readable rooms by room ID
+We can't peek into rooms with shared history_visibility
+We can't peek into rooms with invited history_visibility
+We can't peek into rooms with joined history_visibility
+Local users can peek by room alias
+Peeked rooms only turn up in the sync for the device who peeked them
+
+# Validation needs to be added to Synapse: https://github.com/matrix-org/synapse/issues/10554
+Rejects invalid device keys

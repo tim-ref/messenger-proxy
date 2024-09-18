@@ -26,9 +26,10 @@ federationListCache:
   baseDirectory: "federationList"
   file: "federationList/federationList.json"
   metaFile: "federationList/federationList-meta.json"
+  updateIntervalMinutes: 1
 
 inboundProxy:
-  homeserverUrl: "http://host.docker.internal:8083"
+  homeserverUrl: "http://synapse:8083"
   synapseHealthEndpoint: "/health"
   synapsePort: 8083
   port: 8090

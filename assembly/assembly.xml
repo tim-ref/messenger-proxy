@@ -19,18 +19,75 @@
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.3 http://maven.apache.org/xsd/assembly-1.1.3.xsd http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.3 ">
 
-  <id>docker</id>
+    <id>github-publish</id>
 
-  <formats>
-    <format>tar.gz</format>
-  </formats>
+    <formats>
+        <format>tar.gz</format>
+        <format>dir</format>
+    </formats>
 
-  <includeBaseDirectory>false</includeBaseDirectory>
+    <includeBaseDirectory>false</includeBaseDirectory>
 
-  <fileSets>
-    <fileSet>
-      <directory>${project.basedir}</directory>
-      <outputDirectory>/</outputDirectory>
-    </fileSet>
-  </fileSets>
+    <fileSets>
+        <fileSet>
+            <directory>.mvn</directory>
+            <outputDirectory>/.mvn</outputDirectory>
+            <includes>
+                <include>jvm.config</include>
+            </includes>
+        </fileSet>
+        <fileSet>
+            <directory>.mvn/wrapper</directory>
+            <outputDirectory>/.mvn/wrapper</outputDirectory>
+        </fileSet>
+        <fileSet>
+            <directory>.</directory>
+            <outputDirectory>/</outputDirectory>
+            <includes>
+                <include>.gitignore</include>
+                <include>.java-version</include>
+                <include>.triviignore</include>
+                <include>docker-compose.yml</include>
+                <include>Dockerfile</include>
+                <include>java.security</include>
+                <include>LICENSE.txt</include>
+                <include>mvnw</include>
+                <include>mvnw.cmd</include>
+                <include>NOTICE</include>
+                <include>pom.xml</include>
+                <include>README.md</include>
+            </includes>
+        </fileSet>
+        <fileSet>
+            <directory>.run</directory>
+            <outputDirectory>/.run</outputDirectory>
+        </fileSet>
+        <fileSet>
+            <directory>certificates</directory>
+            <outputDirectory>/certificates</outputDirectory>
+            <includes>
+                <include>ca.conf</include>
+            </includes>
+        </fileSet>
+        <fileSet>
+            <directory>documentation</directory>
+            <outputDirectory>/documentation</outputDirectory>
+        </fileSet>
+        <fileSet>
+            <directory>http</directory>
+            <outputDirectory>/http</outputDirectory>
+        </fileSet>
+        <fileSet>
+            <directory>src</directory>
+            <outputDirectory>/src</outputDirectory>
+        </fileSet>
+        <fileSet>
+            <directory>synapse</directory>
+            <outputDirectory>/synapse</outputDirectory>
+        </fileSet>
+        <fileSet>
+            <directory>assembly/public</directory>
+            <outputDirectory>/</outputDirectory>
+        </fileSet>
+    </fileSets>
 </assembly>

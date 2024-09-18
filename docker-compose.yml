@@ -14,8 +14,6 @@
 # limitations under the License.
 #
 
-version: "3.9"
-
 services:
   messenger-proxy:
     container_name: timref-messenger-proxy
@@ -36,7 +34,8 @@ services:
     environment:
       CONFIGURATION_FILE_PATH: "/app/resources/application-local-docker.yml"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - default
       - timref-network
@@ -54,8 +53,8 @@ services:
       POSTGRES_PASSWORD: password
     healthcheck:
       test: pg_isready -U messenger-proxy -d messenger-proxy-db
-      interval: 10s
-      timeout: 3s
+      interval: 3s
+      timeout: 2s
       retries: 3
 
   synapse:
@@ -68,12 +67,15 @@ services:
       GID: 0
       SYNAPSE_ADMIN_USER: admin
       SYNAPSE_ADMIN_PASSWORD: admin
+      SYNAPSE_TEST_USER: test
+      SYNAPSE_TEST_PASSWORD: test
       POSTGRES_USER: synapse
       POSTGRES_PASSWORD: synapsepassword
       POSTGRES_DB: synapse
       POSTGRES_HOST: synapse-db
     depends_on:
-      - synapse-db
+      synapse-db:
+        condition: service_healthy
     networks:
       - default
       - timref-network
@@ -92,8 +94,8 @@ services:
       - "5434:5432"
     healthcheck:
       test: pg_isready -U synapse -d synapse
-      interval: 10s
-      timeout: 3s
+      interval: 3s
+      timeout: 2s
       retries: 3
 
 networks:

@@ -34,15 +34,21 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
 import io.ktor.server.engine.*
-import kotlinx.coroutines.*
+import io.ktor.server.request.*
+import io.mockk.*
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import net.folivo.trixnity.api.client.MatrixApiClient
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.time.Duration.Companion.hours
+
+const val proxy = "http://localhost:8090"
+const val homeserver = "http://localhost:8083"
 
 class InboundProxyIT {
 
@@ -56,9 +62,9 @@ class InboundProxyIT {
     private val externalMatrixHostname = ""
     private val matrixHttpsPort = 8090
     private val proxyInboundHostPort = 8090
-    private val wellKnownEndpoint = "http://localhost:8090/.well-known/matrix/server"
-    private val unknownEndpoint = "http://localhost:8090/_matrix/client/v3/asdf"
-    private val pushRuleWithoutTemplateEndpoint = "http://localhost:8090/_matrix/client/v3/pushrules/global/not_a_template/foo"
+    private val wellKnownEndpoint = "$proxy/.well-known/matrix/server"
+    private val unknownEndpoint = "$proxy/_matrix/client/v3/asdf"
+    private val pushRuleWithoutTemplateEndpoint = "$proxy/_matrix/client/v3/pushrules/global/not_a_template/foo"
     private val httpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) {
             json()
@@ -102,8 +108,19 @@ class InboundProxyIT {
                 accessTokenToUserIdAuthenticationFunction = AccessTokenToUserIdAuthenticationFunctionImpl(
                     AccessTokenToUserIdImpl(inboundProxyConfig, MatrixApiClient())
                 ),
-                inboundClientRoutes = InboundClientRoutesImpl(inboundProxyConfig,logInfoConfig ,httpClient, rawDataServiceStub),
-                inboundFederationRoutes = InboundFederationRoutesImpl(inboundProxyConfig, httpClient, rawDataServiceStub, contactManagementServiceMock, vzdPublicIDCheckMock                ),
+                inboundClientRoutes = InboundClientRoutesImpl(
+                    inboundProxyConfig,
+                    logInfoConfig,
+                    httpClient,
+                    rawDataServiceStub
+                ),
+                inboundFederationRoutes = InboundFederationRoutesImpl(
+                    inboundProxyConfig,
+                    httpClient,
+                    rawDataServiceStub,
+                    contactManagementServiceMock,
+                    vzdPublicIDCheckMock
+                ),
                 httpClient = httpClient
             ).start()
 
@@ -123,7 +140,7 @@ class InboundProxyIT {
         response.bodyAsText() shouldBe "{\"m.server\":\"localhost:443\"}"
     }
 
-    // These tests verify the changes made in the CustomMatrixServer.kt in comparison to the orginal MatrixApiServer.kt
+    // These tests verify the changes made in the CustomMatrixServer.kt in comparison to the original MatrixApiServer.kt
     @Test
     fun shouldReturnNotFoundOnNotExistentRoute() = runTest {
         val response = httpClient.get(unknownEndpoint)
@@ -140,4 +157,80 @@ class InboundProxyIT {
         // the error message in the real application environment is "Can't transform call to resource"
         response.bodyAsText() shouldBe "{\"errcode\":\"M_UNKNOWN\",\"error\":\"net.folivo.trixnity.core.model.push.PushRuleKind does not contain element with name 'not_a_template'\"}"
     }
+
+
+    @Test
+    fun `should return forbidden on putting too long status message`() = runTest {
+        val response = httpClient.put("$proxy/_matrix/client/v3/presence/@test:synapse/status")
+        {
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{
+                    "presence": "online",
+                    "status_msg": "thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage."
+                    }"""
+            )
+        }
+
+        response.status shouldBe HttpStatusCode.Forbidden
+
+    }
+
+    @Test
+    fun `should forward request on including short status message`() = runTest {
+        val callSlot = slot<ApplicationCall>()
+        val mockResponse = mockk<HttpResponse>()
+
+        mockkStatic(::forwardRequest)
+        coEvery {
+            forwardRequest(capture(callSlot), any(), any(), any())
+        } coAnswers {
+            Quadruple(callSlot.captured.request, mockResponse, 100L, 200)
+        }
+
+        httpClient.put("$proxy/_matrix/client/v3/presence/@test:synapse/status") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{
+                 "presence": "online",
+                 "status_msg": "thisIsAShortStatusMessage"
+                 }"""
+            )
+        }
+
+        coVerify {
+            forwardRequest(
+                any(),
+                any(),
+                Url("$homeserver/_matrix/client/v3/presence/@test:synapse/status"),
+                any()
+            )
+        }
+    }
+
+    @Test
+    fun `should forward request on not including status message`() = runTest {
+        val callSlot = slot<ApplicationCall>()
+        val mockResponse = mockk<HttpResponse>()
+
+        mockkStatic(::forwardRequest)
+        coEvery {
+            forwardRequest(capture(callSlot), any(), any(), any())
+        } coAnswers {
+            Quadruple(callSlot.captured.request, mockResponse, 100L, 200)
+        }
+
+
+        httpClient.put("$proxy/_matrix/client/v3/presence/@test:synapse/status") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{
+                 "presence": "online"
+                 }"""
+            )
+        }
+
+        coVerify { forwardRequest(any(), any(), Url("$homeserver/_matrix/client/v3/presence/@test:synapse/status"), any()) }
+    }
+
 }

@@ -33,9 +33,7 @@ import de.akquinet.tim.proxy.FileCacheImpl
 import de.akquinet.tim.proxy.ProxyConfiguration
 import okio.FileSystem
 import okio.Path.Companion.toPath
-import java.net.URL
-import kotlin.random.Random
-import kotlin.time.Duration.Companion.hours
+import java.net.URI
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -44,7 +42,7 @@ interface FederationListCache {
 }
 
 class FederationListCacheImpl(
-    private val config: ProxyConfiguration.FederationListCacheConfiguration,
+    config: ProxyConfiguration.FederationListCacheConfiguration,
     private val regServiceConfig: ProxyConfiguration.RegistrationServiceConfiguration,
     httpClient: HttpClient,
     fileSystem: FileSystem,
@@ -55,12 +53,13 @@ class FederationListCacheImpl(
     fileSystem = fileSystem
 ) {
     private val httpClient = httpClient.config {
-        install(HttpRequestRetry) {
-            retryOnExceptionOrServerErrors()
-            exponentialDelay(maxDelayMs = 10.minutes.inWholeMilliseconds)
+        install(HttpTimeout) {
+            requestTimeoutMillis = 30.seconds.inWholeMilliseconds
+            connectTimeoutMillis = 10.seconds.inWholeMilliseconds
         }
     }
 
+    private val flUpdateInterval=config.updateIntervalMinutes
     private val _domains = MutableStateFlow<Set<String>>(emptySet())
     override val domains: StateFlow<Set<String>> = _domains.asStateFlow()
 
@@ -73,9 +72,7 @@ class FederationListCacheImpl(
         super.start()
     }
 
-    override fun nextUpdate(lastWasError: Boolean): Instant =
-        if (lastWasError) Clock.System.now() + 5.minutes + Random.nextInt(-120, 120).seconds
-        else Clock.System.now() + 1.hours + Random.nextInt(-360, 360).seconds
+    override fun nextUpdate(): Instant = Clock.System.now() + flUpdateInterval.minutes
 
 
     override suspend fun parseFile(content: String): FederationList {
@@ -84,7 +81,10 @@ class FederationListCacheImpl(
 
 
     override suspend fun requestFile(version: String?): RequestFileResult<FederationList> {
-        val federationListUrl = URL(regServiceConfig.baseUrl + ":" + regServiceConfig.servicePort + regServiceConfig.federationListEndpoint).toString()
+        val federationListUrl = URI(
+            regServiceConfig.baseUrl + ":" + regServiceConfig.servicePort + regServiceConfig.federationListEndpoint
+            ).toURL().toString()
+
         val response = httpClient.get(federationListUrl) {}
         return when (val status = response.status) {
             HttpStatusCode.OK -> {
@@ -101,8 +101,6 @@ class FederationListCacheImpl(
         }
     }
 }
-
-class FederationListParseException(message: String) : RuntimeException(message)
 
 @Serializable
 data class FederationList(

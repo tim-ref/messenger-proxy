@@ -28,6 +28,7 @@ federationListCache:
   baseDirectory: "federationList"
   file: "federationList/federationList.json"
   metaFile: "federationList/federationList-meta.json"
+  updateIntervalMinutes: 1
 
 inboundProxy:
   homeserverUrl: "http://localhost:8083"
