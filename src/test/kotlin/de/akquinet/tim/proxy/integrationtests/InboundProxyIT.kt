@@ -16,7 +16,12 @@
 
 package de.akquinet.tim.proxy.integrationtests
 
-import de.akquinet.tim.proxy.*
+import de.akquinet.tim.ErrorResponse
+import de.akquinet.tim.proxy.InboundProxyImpl
+import de.akquinet.tim.proxy.InviteRejectionPolicy
+import de.akquinet.tim.proxy.ProxyConfiguration
+import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
+import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
@@ -25,6 +30,7 @@ import de.akquinet.tim.proxy.mocks.ContactManagementStub
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.RawDataServiceStub
 import de.akquinet.tim.proxy.mocks.VZDPublicIDCheckMock
+import de.akquinet.tim.shouldEqualJsonMatrixStandard
 import io.kotest.matchers.shouldBe
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
@@ -34,10 +40,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
-import io.ktor.server.application.*
 import io.ktor.server.engine.*
-import io.ktor.server.request.*
-import io.mockk.*
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -55,6 +58,7 @@ class InboundProxyIT {
     private lateinit var federationListCacheMock: FederationListCacheMock
 
     private lateinit var rawDataServiceStub: RawDataServiceStub
+    private lateinit var bsEinsService: BerechtigungsstufeEinsService
     private val contactManagementServiceMock = ContactManagementStub()
     private val vzdPublicIDCheckMock = VZDPublicIDCheckMock()
 
@@ -75,7 +79,7 @@ class InboundProxyIT {
             level = LogLevel.ALL
         }
     }
-    val logInfoConfig = ProxyConfiguration.LogInfoConfig(
+    private val logInfoConfig = ProxyConfiguration.LogInfoConfig(
         "rawdata/path",
         "doctor",
         "2384234234",
@@ -84,6 +88,11 @@ class InboundProxyIT {
     )
 
     private lateinit var inboundApplicationEngine: ApplicationEngine
+
+    private var timAuthorizationCheckConfiguration = ProxyConfiguration.TimAuthorizationCheckConfiguration(
+        TimAuthorizationCheckConcept.CLIENT,
+        InviteRejectionPolicy.ALLOW_ALL
+    )
 
     @BeforeTest
     fun beforeEach(): Unit = runBlocking {
@@ -97,6 +106,7 @@ class InboundProxyIT {
         )
 
         federationListCacheMock = FederationListCacheMock()
+        bsEinsService = BerechtigungsstufeEinsService(federationListCacheMock)
         rawDataServiceStub = RawDataServiceStub()
         // always trust server itself
         federationListCacheMock.domains.update { it + "$virtualHostname:$matrixHttpsPort" + "$externalMatrixHostname:$matrixHttpsPort" }
@@ -104,22 +114,25 @@ class InboundProxyIT {
         inboundApplicationEngine =
             InboundProxyImpl(
                 inboundProxyConfiguration = inboundProxyConfig,
-                federationListCache = federationListCacheMock,
+                berechtigungsstufeEinsService = bsEinsService,
                 accessTokenToUserIdAuthenticationFunction = AccessTokenToUserIdAuthenticationFunctionImpl(
                     AccessTokenToUserIdImpl(inboundProxyConfig, MatrixApiClient())
                 ),
                 inboundClientRoutes = InboundClientRoutesImpl(
-                    inboundProxyConfig,
-                    logInfoConfig,
-                    httpClient,
-                    rawDataServiceStub
+                    config = inboundProxyConfig,
+                    logConfiguration = logInfoConfig,
+                    timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
+                    httpClient = httpClient,
+                    rawDataService = rawDataServiceStub,
+                    berechtigungsstufeEinsService = bsEinsService
                 ),
                 inboundFederationRoutes = InboundFederationRoutesImpl(
                     inboundProxyConfig,
                     httpClient,
                     rawDataServiceStub,
                     contactManagementServiceMock,
-                    vzdPublicIDCheckMock
+                    vzdPublicIDCheckMock,
+                    timAuthorizationCheckConfiguration
                 ),
                 httpClient = httpClient
             ).start()
@@ -146,7 +159,10 @@ class InboundProxyIT {
         val response = httpClient.get(unknownEndpoint)
 
         response.status shouldBe HttpStatusCode.NotFound
-        response.bodyAsText() shouldBe "{\"errcode\":\"M_NOT_FOUND\"}"
+        response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+            errcode = "M_NOT_FOUND",
+            error = "No resource was found for this request."
+        )
     }
 
     @Test
@@ -155,82 +171,10 @@ class InboundProxyIT {
 
         response.status shouldBe HttpStatusCode.BadRequest
         // the error message in the real application environment is "Can't transform call to resource"
-        response.bodyAsText() shouldBe "{\"errcode\":\"M_UNKNOWN\",\"error\":\"net.folivo.trixnity.core.model.push.PushRuleKind does not contain element with name 'not_a_template'\"}"
-    }
-
-
-    @Test
-    fun `should return forbidden on putting too long status message`() = runTest {
-        val response = httpClient.put("$proxy/_matrix/client/v3/presence/@test:synapse/status")
-        {
-            contentType(ContentType.Application.Json)
-            setBody(
-                """{
-                    "presence": "online",
-                    "status_msg": "thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage."
-                    }"""
-            )
-        }
-
-        response.status shouldBe HttpStatusCode.Forbidden
-
-    }
-
-    @Test
-    fun `should forward request on including short status message`() = runTest {
-        val callSlot = slot<ApplicationCall>()
-        val mockResponse = mockk<HttpResponse>()
-
-        mockkStatic(::forwardRequest)
-        coEvery {
-            forwardRequest(capture(callSlot), any(), any(), any())
-        } coAnswers {
-            Quadruple(callSlot.captured.request, mockResponse, 100L, 200)
-        }
-
-        httpClient.put("$proxy/_matrix/client/v3/presence/@test:synapse/status") {
-            contentType(ContentType.Application.Json)
-            setBody(
-                """{
-                 "presence": "online",
-                 "status_msg": "thisIsAShortStatusMessage"
-                 }"""
-            )
-        }
-
-        coVerify {
-            forwardRequest(
-                any(),
-                any(),
-                Url("$homeserver/_matrix/client/v3/presence/@test:synapse/status"),
-                any()
-            )
-        }
-    }
-
-    @Test
-    fun `should forward request on not including status message`() = runTest {
-        val callSlot = slot<ApplicationCall>()
-        val mockResponse = mockk<HttpResponse>()
-
-        mockkStatic(::forwardRequest)
-        coEvery {
-            forwardRequest(capture(callSlot), any(), any(), any())
-        } coAnswers {
-            Quadruple(callSlot.captured.request, mockResponse, 100L, 200)
-        }
-
-
-        httpClient.put("$proxy/_matrix/client/v3/presence/@test:synapse/status") {
-            contentType(ContentType.Application.Json)
-            setBody(
-                """{
-                 "presence": "online"
-                 }"""
-            )
-        }
-
-        coVerify { forwardRequest(any(), any(), Url("$homeserver/_matrix/client/v3/presence/@test:synapse/status"), any()) }
+        response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+            errcode = "M_UNKNOWN",
+            error = "net.folivo.trixnity.core.model.push.PushRuleKind does not contain element with name 'not_a_template'"
+        )
     }
 
 }

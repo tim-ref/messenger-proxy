@@ -13,16 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package de.akquinet.tim.proxy.client.model.route.account_data
 
-package de.akquinet.tim.proxy.mocks
-
-import de.akquinet.tim.proxy.VZDPublicIDCheck
-
-class VZDPublicIDCheckMock: VZDPublicIDCheck {
-
-    var expectedResult = false
-
-    override suspend fun areMXIDsPublic(inviter: String, invited: String): Boolean {
-        return expectedResult
-    }
+enum class AccountDataType(val type: String) {
+    PERMISSION_CONFIG("de.gematik.tim.account.permissionconfig.v1")
 }

@@ -73,3 +73,8 @@ prometheusClient:
 logLevelResetConfig:
   logLevelResetDelayInSeconds: 5
   resetLogLevel: "DEBUG"
+
+# authorization concept for invite events
+timAuthorizationCheckConfiguration:
+  concept: "CLIENT" # [PROXY, CLIENT] | default: CLIENT
+  inviteRejectionPolicy: "ALLOW_ALL" # [ALLOW_ALL, BLOCK_ALL] | default: ALLOW_ALL

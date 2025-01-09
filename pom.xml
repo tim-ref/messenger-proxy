@@ -10,7 +10,7 @@
 
     <groupId>de.akquinet.timref.fachdienst.messenger-proxy</groupId>
     <artifactId>mp-backend</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
 
     <name>Messenger-Proxy</name>
     <description>Messenger-Proxy für die TIM Referenzimplementierung</description>
@@ -298,6 +298,12 @@
             <groupId>io.kotest</groupId>
             <artifactId>kotest-assertions-json-jvm</artifactId>
             <version>${kotest.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.kotest.extensions</groupId>
+            <artifactId>kotest-assertions-ktor-jvm</artifactId>
+            <version>2.0.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -881,7 +887,7 @@
     <scm>
         <connection>${env.CI_SCM_CONNECTION}</connection>
         <developerConnection>${env.CI_SCM_DEVELOPER_CONNECTION}</developerConnection>
-        <tag>0.3.0</tag>
+        <tag>0.4.0</tag>
         <url>${env.CI_SCM_URL}</url>
     </scm>
 </project>

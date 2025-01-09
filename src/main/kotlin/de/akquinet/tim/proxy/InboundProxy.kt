@@ -16,13 +16,13 @@
 
 package de.akquinet.tim.proxy
 
+import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunction
 import de.akquinet.tim.proxy.client.InboundClientRoutes
-import de.akquinet.tim.proxy.federation.FederationListCache
-import de.akquinet.tim.proxy.federation.InboundFederationRoutes
-import de.akquinet.tim.proxy.federation.MatrixFederationCheckAuth.Mode.INBOUND
-import de.akquinet.tim.proxy.federation.matrixFederationCheckAuth
 import de.akquinet.tim.proxy.client.model.route.installPushrulesRoutesForBadRequest
+import de.akquinet.tim.proxy.federation.BerechtigungsstufeEinsAuthenticationProvider
+import de.akquinet.tim.proxy.federation.InboundFederationRoutes
+import de.akquinet.tim.proxy.federation.berechtigungsstufeEinsCheck
 import de.akquinet.tim.proxy.util.customMatrixServer
 import io.ktor.client.*
 import io.ktor.http.*
@@ -49,7 +49,7 @@ interface InboundProxy {
 
 class InboundProxyImpl(
     private val inboundProxyConfiguration: ProxyConfiguration.InboundProxyConfiguration,
-    private val federationListCache: FederationListCache,
+    private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService,
     private val accessTokenToUserIdAuthenticationFunction: AccessTokenToUserIdAuthenticationFunction,
     private val inboundClientRoutes: InboundClientRoutes,
     private val inboundFederationRoutes: InboundFederationRoutes,
@@ -70,20 +70,33 @@ class InboundProxyImpl(
 
                     route("/_matrix/federation/v1/openid/userinfo") {
                         handle {
-                            forwardRequest(call, httpClient, call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl), null)
+                            forwardRequest(
+                                call,
+                                httpClient,
+                                call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl),
+                                null
+                            )
                         }
                     }
-                    with(inboundClientRoutes) {
-                        clientServerApiRoutes()
+
+                    inboundClientRoutes.apply { openClientServerApiRoutes() }
+                    authenticate("matrix-access-token-auth") {
+                        inboundClientRoutes.apply { clientServerApiRoutes() }
                     }
-                    authenticate("federation-check") {
+
+                    authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
                         inboundFederationRoutes.apply { serverServerApiRoutes() }
                         inboundFederationRoutes.apply { serverServerRawDataRoutes() }
                     }
 
                     route("/_synapse/admin/{...}") {
                         handle {
-                            forwardRequest(call, httpClient, call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl), null)
+                            forwardRequest(
+                                call,
+                                httpClient,
+                                call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl),
+                                null
+                            )
                         }
                     }
 
@@ -100,7 +113,10 @@ class InboundProxyImpl(
                             val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }
 
                             kLog.warn { "inbound request on unhandled path ${call.request.uri} with method ${call.request.httpMethod.value}, body $requestBody and headers $headerList" }
-                            throw MatrixServerException(HttpStatusCode.NotFound, ErrorResponse.NotFound())
+                            throw MatrixServerException(
+                                HttpStatusCode.NotFound,
+                                ErrorResponse.NotFound("No resource was found for this request.")
+                            )
                         }
                     }
                 }
@@ -110,9 +126,8 @@ class InboundProxyImpl(
 
     private fun Application.configureMatrixFederationCheckAuth() {
         install(Authentication) {
-            matrixFederationCheckAuth("federation-check") {
-                federationAllowed = federationListCache.domains
-                mode = INBOUND
+            berechtigungsstufeEinsCheck(checkerService = berechtigungsstufeEinsService) {
+                proxyMode = BerechtigungsstufeEinsAuthenticationProvider.ProxyMode.INBOUND
                 enforceDomainList = inboundProxyConfiguration.enforceDomainList
             }
             matrixAccessTokenAuth("matrix-access-token-auth") {

@@ -16,15 +16,19 @@
 
 package de.akquinet.tim.proxy.federation
 
+import de.akquinet.tim.ErrorResponse
+import de.akquinet.tim.proxy.InviteRejectionPolicy
 import de.akquinet.tim.proxy.ProxyConfiguration
+import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
+import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
-import de.akquinet.tim.proxy.federation.MatrixFederationCheckAuth.Mode.INBOUND
 import de.akquinet.tim.proxy.mocks.ContactManagementStub
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.VZDPublicIDCheckMock
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.rawdata.model.RawDataMetaData
+import de.akquinet.tim.shouldEqualJsonMatrixStandard
 import io.kotest.assertions.assertSoftly
 import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
@@ -89,12 +93,21 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                                   ]
                                 }
                                 """
+    val defaultTimAuthorizationCheckConfiguration = ProxyConfiguration.TimAuthorizationCheckConfiguration(
+        TimAuthorizationCheckConcept.PROXY,
+        InviteRejectionPolicy.ALLOW_ALL
+    )
+    val bsEinsService = BerechtigungsstufeEinsService(federationListCacheMock)
 
     beforeTest {
         federationListCacheMock.domains.value = setOf()
     }
 
-    fun withCut(block: suspend ApplicationTestBuilder.() -> Unit) {
+    fun withCut(
+        // gemSpec_TI-M_Basis_V1.0.0, AFO_25046: override configuration for test
+        timAuthorizationCheckConfiguration: ProxyConfiguration.TimAuthorizationCheckConfiguration = defaultTimAuthorizationCheckConfiguration,
+        block: suspend ApplicationTestBuilder.() -> Unit
+    ) {
         testApplication {
             val client = createClient {
                 install(ContentNegotiation) {
@@ -105,9 +118,8 @@ class InboundFederationCheckerImplTest : ShouldSpec({
 
             application {
                 install(Authentication) {
-                    matrixFederationCheckAuth("federation-check") {
-                        federationAllowed = federationListCacheMock.domains
-                        mode = INBOUND
+                    berechtigungsstufeEinsCheck(checkerService = bsEinsService) {
+                        proxyMode = BerechtigungsstufeEinsAuthenticationProvider.ProxyMode.INBOUND
                     }
                     matrixAccessTokenAuth("matrix-access-token-auth") {
                         authenticationFunction = AccessTokenToUserIdAuthenticationFunctionImpl(
@@ -117,11 +129,11 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                 }
 
                 matrixApiServer(Json) {
-                    authenticate("federation-check") {
+                    authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
                         with(
                             InboundFederationRoutesImpl(
                                 ProxyConfiguration.InboundProxyConfiguration(
-                                    enforceDomainList = false,
+                                    enforceDomainList = true,
                                     homeserverUrl = destinationUrl,
                                     synapseHealthEndpoint = "/health",
                                     synapsePort = 8090,
@@ -131,7 +143,8 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                                 this@testApplication.client,
                                 rawDataService,
                                 contactManagementService,
-                                vzdPublicMock
+                                vzdPublicMock,
+                                timAuthorizationCheckConfiguration
                             )
                         ) {
                             serverServerApiRoutes()
@@ -153,6 +166,10 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                             call.request.headers[HttpHeaders.ContentType] shouldBe ContentType.Application.Json.toString()
                             call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                             call.respond("""{"one_time_keys":{}}""")
+                        }
+                        put("/_matrix/federation/v2/invite/{roomId}/{eventId}") {
+                            call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                            call.respond("""{}""") //horribly complicated event structure omitted for testing
                         }
                     }
                 }
@@ -215,11 +232,15 @@ class InboundFederationCheckerImplTest : ShouldSpec({
             }
         }
 
+        // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-Messenger-Dienst/gemSpec_TI-Messenger-Dienst_V1.1.1/#8.3
         should("deny unfederated domain") {
             withCut {
                 val response = client.postKeyClaimAuthenticated()
                 response.status shouldBe HttpStatusCode.Forbidden
-                response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"not part of federation"}"""
+                response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+                    errcode = "M_FORBIDDEN",
+                    error = "not part of federation"
+                )
             }
         }
     }
@@ -227,7 +248,98 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         withCut {
             val response = client.get("/blubs")
             response.status shouldBe HttpStatusCode.NotFound
-            response.bodyAsText() shouldBe """{"errcode":"M_UNRECOGNIZED","error":"unsupported (or unknown) endpoint"}"""
+            response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+                errcode = "M_UNRECOGNIZED",
+                error = "unsupported (or unknown) endpoint",
+            )
+        }
+    }
+
+    context("federation invite") {
+        suspend fun HttpClient.putInvite(inviting: String) =
+            put("/_matrix/federation/v2/invite/{roomId}/{eventId}") {
+                header(
+                    HttpHeaders.Authorization,
+                    """X-Matrix origin="fed",destination="otherHost:80",key="ed25519:ABC",sig="signature""""
+                )
+                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                setBody(
+                    """
+                    {
+                      "event": {
+                        "content": {
+                          "membership": "invite"
+                        },
+                        "origin": "matrix.org",
+                        "origin_server_ts": 1234567890,
+                        "sender": "$inviting",
+                        "state_key": "@joe:elsewhere.com",
+                        "type": "m.room.member"
+                      },
+                      "invite_room_state": [
+                        {
+                          "content": {
+                            "name": "Example Room"
+                          },
+                          "sender": "@bob:example.org",
+                          "state_key": "",
+                          "type": "m.room.name"
+                        },
+                        {
+                          "content": {
+                            "join_rule": "invite"
+                          },
+                          "sender": "@bob:example.org",
+                          "state_key": "",
+                          "type": "m.room.join_rules"
+                        }
+                      ],
+                      "room_version": "2"
+                    }
+                """.trimIndent()
+                )
+            }
+
+        // gemSpec_TI-Messenger-Dienst_V1.1.1, 3.5.2.2+: after federation check, check invite permission on proxy
+
+        should("fail if neither contact nor FHIR entry if check on proxy") {
+            withCut {
+                federationListCacheMock.domains.value = setOf("fed")
+                val response = client.putInvite("@someone:example.org")
+                response.status shouldBe HttpStatusCode.Forbidden
+                response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"can not invite this user"}"""
+            }
+        }
+
+        should("succeed for valid contact") {
+            withCut {
+                federationListCacheMock.domains.value = setOf("fed")
+                val response = client.putInvite("4444")
+                response.status shouldBe HttpStatusCode.OK
+            }
+        }
+
+        should("succeed for FHIR entry") {
+            withCut {
+                federationListCacheMock.domains.value = setOf("fed")
+                vzdPublicMock.expectedResult = true
+                val response = client.putInvite("@someone:example.org")
+                response.status shouldBe HttpStatusCode.OK
+            }
+        }
+
+        // gemSpec_TI-M_Basis_V1.0.0, AFO_25046: after federation check, send invite to client to check invite permission
+
+        should("succeed if invite permission check on client") {
+            val clientTimAuthorizationCheckConfiguration = ProxyConfiguration.TimAuthorizationCheckConfiguration(
+                TimAuthorizationCheckConcept.CLIENT,
+                InviteRejectionPolicy.ALLOW_ALL
+            )
+            withCut(clientTimAuthorizationCheckConfiguration) {
+                federationListCacheMock.domains.value = setOf("fed")
+                val response = client.putInvite("@someone:example.org")
+                response.status shouldBe HttpStatusCode.OK
+            }
         }
     }
 })

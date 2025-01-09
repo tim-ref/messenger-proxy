@@ -21,12 +21,8 @@ import com.sksamuel.hoplite.yaml.YamlParser
 import de.akquinet.tim.proxy.actuator.ActuatorRoutes
 import de.akquinet.tim.proxy.actuator.ActuatorRoutesImpl
 import de.akquinet.tim.proxy.availability.RegistrationServiceHealthApi
-import de.akquinet.tim.proxy.client.AccessTokenToUserId
-import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunction
-import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
-import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
-import de.akquinet.tim.proxy.client.InboundClientRoutes
-import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
+import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
+import de.akquinet.tim.proxy.client.*
 import de.akquinet.tim.proxy.contactmgmt.ContactManagementApi
 import de.akquinet.tim.proxy.contactmgmt.ContactManagementApiImpl
 import de.akquinet.tim.proxy.contactmgmt.ContactRoutes
@@ -37,19 +33,14 @@ import de.akquinet.tim.proxy.contactmgmt.authorization.MatrixOpenIdClient
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementServiceImpl
 import de.akquinet.tim.proxy.contactmgmt.database.DatabaseFactory
-import de.akquinet.tim.proxy.federation.FederationListCache
-import de.akquinet.tim.proxy.federation.FederationListCacheImpl
-import de.akquinet.tim.proxy.federation.InboundFederationRoutes
-import de.akquinet.tim.proxy.federation.InboundFederationRoutesImpl
-import de.akquinet.tim.proxy.federation.OutboundFederationRoutes
-import de.akquinet.tim.proxy.federation.OutboundFederationRoutesImpl
+import de.akquinet.tim.proxy.federation.*
 import de.akquinet.tim.proxy.logging.LogLevelService
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.serialization.kotlinx.json.json
+import io.ktor.client.*
+import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import net.folivo.trixnity.api.client.MatrixApiClient
@@ -58,11 +49,16 @@ import net.folivo.trixnity.core.serialization.createMatrixEventJson
 import okio.FileSystem
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider
+import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import java.security.Security
+import java.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.toJavaDuration
 
 suspend fun main(): Unit = coroutineScope {
     // BC providers required for certificates and TLS cipher suites using brainpool curves
@@ -81,7 +77,7 @@ suspend fun main(): Unit = coroutineScope {
     launch { koin.get<ContactManagementApiImpl>().start() }
 }
 
-private fun initiateKoin(config:ProxyConfiguration)=koinApplication {
+private fun initiateKoin(config: ProxyConfiguration) = koinApplication {
 
     modules(
         module {
@@ -97,6 +93,7 @@ private fun initiateKoin(config:ProxyConfiguration)=koinApplication {
             single { config.prometheusClient }
             single { config.logInfoConfig }
             single { config.logLevelResetConfig }
+            single { config.timAuthorizationCheckConfiguration}
             single { FileSystem.SYSTEM }
 
             configureDatabase(config)
@@ -129,14 +126,23 @@ private fun initiateKoin(config:ProxyConfiguration)=koinApplication {
             singleOf(::ActuatorRoutesImpl).bind<ActuatorRoutes>()
             singleOf(::RawDataServiceImpl).bind<RawDataService>()
             singleOf(::ContactManagementApiImpl).bind<ContactManagementApi>()
+            singleOf(::BerechtigungsstufeEinsService) { bind<BerechtigungsstufeEinsService>() }
         })
 }.koin
+
 private fun createGeneralHttpClient(): HttpClient {
     val generalHttpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) {
             json()
         }
         followRedirects = false
+        engine {
+            config {
+                connectTimeout(30.seconds.toJavaDuration())
+                readTimeout(2.minutes.toJavaDuration())
+                callTimeout(Duration.ZERO) // disables call timeout
+            }
+        }
     }
     return generalHttpClient
 }
@@ -146,6 +152,7 @@ private fun loadProxyConfiguration(filePath: String) = ConfigLoaderBuilder.defau
     .addResourceOrFileSource(filePath)
     .build()
     .loadConfigOrThrow<ProxyConfiguration>()
+
 private fun configureDatabase(config: ProxyConfiguration) {
     //flyway migrate
     DatabaseFactory.migrate(config.database)

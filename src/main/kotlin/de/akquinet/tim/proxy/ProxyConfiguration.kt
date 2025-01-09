@@ -27,7 +27,8 @@ data class ProxyConfiguration(
     val logInfoConfig: LogInfoConfig,
     val prometheusClient: PrometheusClient,
     val registrationServiceConfig: RegistrationServiceConfiguration,
-    val logLevelResetConfig: LogLevelResetConfiguration
+    val logLevelResetConfig: LogLevelResetConfiguration,
+    val timAuthorizationCheckConfiguration: TimAuthorizationCheckConfiguration
 ) {
     data class FederationListCacheConfiguration(
         val baseDirectory: String,
@@ -97,4 +98,17 @@ data class ProxyConfiguration(
         val logLevelResetDelayInSeconds: Long,
         val resetLogLevel: String
     )
+
+    data class TimAuthorizationCheckConfiguration (
+        val concept: TimAuthorizationCheckConcept,
+        val inviteRejectionPolicy: InviteRejectionPolicy
+    )
+}
+
+enum class TimAuthorizationCheckConcept {
+    CLIENT, PROXY
+}
+
+enum class InviteRejectionPolicy{
+    ALLOW_ALL, BLOCK_ALL
 }

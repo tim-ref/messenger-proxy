@@ -24,7 +24,7 @@ import net.folivo.trixnity.core.ErrorResponse
 import net.folivo.trixnity.core.MatrixServerException
 import net.folivo.trixnity.core.model.UserId
 
-interface AccessTokenToUserIdAuthenticationFunction :
+fun interface AccessTokenToUserIdAuthenticationFunction :
     suspend (UserAccessTokenCredentials) -> AccessTokenAuthenticationFunctionResult
 
 @JvmInline

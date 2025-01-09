@@ -16,10 +16,18 @@
 
 package de.akquinet.tim.proxy.federation
 
+import de.akquinet.tim.ErrorResponse
+import de.akquinet.tim.proxy.InviteRejectionPolicy
 import de.akquinet.tim.proxy.ProxyConfiguration
+import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
+import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunction
+import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
+import de.akquinet.tim.proxy.client.UserIdPrincipal
+import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.rawdata.model.RawDataMetaData
+import de.akquinet.tim.shouldEqualJsonMatrixStandard
 import io.kotest.assertions.assertSoftly
 import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
@@ -30,13 +38,24 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
+import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.testing.*
+import io.mockk.coEvery
+import io.mockk.mockk
 import io.mockk.spyk
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import net.folivo.trixnity.api.server.matrixApiServer
+import net.folivo.trixnity.clientserverapi.model.rooms.CreateRoom
+import net.folivo.trixnity.clientserverapi.model.rooms.DirectoryVisibility
+import net.folivo.trixnity.clientserverapi.server.AccessTokenAuthenticationFunctionResult
+import net.folivo.trixnity.clientserverapi.server.matrixAccessTokenAuth
+import net.folivo.trixnity.core.model.RoomId
+import net.folivo.trixnity.core.model.UserId
+import net.folivo.trixnity.core.model.events.m.room.CreateEventContent
 import kotlin.time.Duration.Companion.hours
 
 class InboundClientCheckerImplTest : ShouldSpec({
@@ -70,7 +89,7 @@ class InboundClientCheckerImplTest : ShouldSpec({
                                 }
                                 """
     val inboundProxyConfig = ProxyConfiguration.InboundProxyConfiguration(
-        enforceDomainList = false,
+        enforceDomainList = true,
         homeserverUrl = synapseDestinationUrl,
         synapseHealthEndpoint = "/health",
         synapsePort = 443,
@@ -84,7 +103,23 @@ class InboundClientCheckerImplTest : ShouldSpec({
         "MP-1",
         "home.de"
     )
+    val timAuthorizationCheckConfiguration = ProxyConfiguration.TimAuthorizationCheckConfiguration(
+        concept = TimAuthorizationCheckConcept.CLIENT,
+        inviteRejectionPolicy = InviteRejectionPolicy.ALLOW_ALL
+    )
     lateinit var rawDataService: RawDataServiceImpl
+    lateinit var bsEinsService: BerechtigungsstufeEinsService
+
+    val matrixTokenAuthMock: AccessTokenToUserIdAuthenticationFunction = mockk { }
+
+    beforeTest {
+        coEvery { matrixTokenAuthMock.invoke(any()) } returns AccessTokenAuthenticationFunctionResult(
+            principal = UserIdPrincipal(
+                UserId(full = "@me:example.com")
+            ),
+            cause = null
+        )
+    }
 
     fun withCut(block: suspend ApplicationTestBuilder.() -> Unit) {
         testApplication {
@@ -96,17 +131,31 @@ class InboundClientCheckerImplTest : ShouldSpec({
 
             rawDataService = spyk(RawDataServiceImpl(logInfoConfig, client))
 
+            val flMock = FederationListCacheMock()
+            flMock.domains.value = setOf("example.com")
+            bsEinsService = BerechtigungsstufeEinsService(flMock)
+
+            val inboundClientRoutes = InboundClientRoutesImpl(
+                config = inboundProxyConfig,
+                logConfiguration = logInfoConfig,
+                timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
+                httpClient = client,
+                rawDataService = rawDataService,
+                berechtigungsstufeEinsService = bsEinsService
+            )
             application {
+                install(Authentication) {
+                    berechtigungsstufeEinsCheck(checkerService = bsEinsService) {
+                        proxyMode = BerechtigungsstufeEinsAuthenticationProvider.ProxyMode.INBOUND
+                        enforceDomainList = true
+                    }
+                    matrixAccessTokenAuth("matrix-access-token-auth") {
+                        authenticationFunction = matrixTokenAuthMock
+                    }
+                }
                 matrixApiServer(Json) {
-                    with(
-                        InboundClientRoutesImpl(
-                            inboundProxyConfig,
-                            logInfoConfig,
-                            client,
-                            rawDataService
-                        )
-                    ) {
-                        clientServerApiRoutes()
+                    authenticate("matrix-access-token-auth") {
+                        inboundClientRoutes.apply { clientServerApiRoutes() }
                     }
                 }
             }
@@ -122,6 +171,15 @@ class InboundClientCheckerImplTest : ShouldSpec({
                             call.request.headers[HttpHeaders.ContentType] shouldBe ContentType.Application.Json.toString()
                             call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                             call.respond(loginResponseString)
+                        }
+                        post("/_matrix/client/v3/createRoom") {
+                            val response = CreateRoom.Response(roomId = RoomId("123:example.com"))
+                            call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                            call.respond(Json.encodeToString(response))
+                        }
+                        post("/_matrix/client/v3/rooms/123:example.com/invite") {
+                            call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                            call.respond("{}")
                         }
                     }
                 }
@@ -166,8 +224,78 @@ class InboundClientCheckerImplTest : ShouldSpec({
             withCut {
                 val response = client.get("/blubs")
                 response.status shouldBe HttpStatusCode.NotFound
-                response.bodyAsText() shouldBe """{"errcode":"M_UNRECOGNIZED","error":"unsupported (or unknown) endpoint"}"""
+                response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+                    errcode = "M_UNRECOGNIZED",
+                    error = "unsupported (or unknown) endpoint"
+                )
             }
         }
     }
+
+    context("client routes with berechtigungsstufe 1 tests: CreateRoom") {
+        val inviter = UserId(full = "@me:example.com")
+        val invited = UserId(full = "@you:example.com")
+        val createRoomRequest = CreateRoom.Request(
+            visibility = DirectoryVisibility.PRIVATE,
+            creationContent = CreateEventContent(creator = inviter),
+            roomVersion = null,
+            initialState = null,
+            invite = setOf(invited),
+            inviteThirdPid = null,
+            roomAliasLocalPart = null,
+            name = "my room",
+            topic = null,
+            isDirect = null,
+            powerLevelContentOverride = null,
+            preset = null
+        )
+
+        should("post create room should succeed") {
+            withCut {
+                val response = client.post("/_matrix/client/v3/createRoom") {
+                    bearerAuth("some.token")
+                    header(HttpHeaders.Accept, ContentType.Application.Json.toString())
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    setBody(Json.encodeToString(createRoomRequest))
+                }
+
+                assertSoftly(response) {
+                    status shouldBe HttpStatusCode.OK
+                    bodyAsText() shouldBe """{"room_id":"123:example.com"}"""
+                }
+            }
+        }
+
+        should("post create room should fail without token") {
+            withCut {
+                val response = client.post("/_matrix/client/v3/createRoom") {
+                    setBody(Json.encodeToString(createRoomRequest))
+                }
+
+                assertSoftly(response) {
+                    status shouldBe HttpStatusCode.Unauthorized
+                }
+            }
+        }
+        should("post create room should fail with invalid token") {
+            coEvery { matrixTokenAuthMock.invoke(any()) } returns AccessTokenAuthenticationFunctionResult(
+                principal = UserIdPrincipal(
+                    UserId(full = "@me:unfederated.com")
+                ),
+                cause = null
+            )
+
+            withCut {
+                val response = client.post("/_matrix/client/v3/createRoom") {
+                    bearerAuth("some.token")
+                    setBody(Json.encodeToString(createRoomRequest))
+                }
+
+                assertSoftly(response) {
+                    status shouldBe HttpStatusCode.Forbidden
+                }
+            }
+        }
+    }
+
 })

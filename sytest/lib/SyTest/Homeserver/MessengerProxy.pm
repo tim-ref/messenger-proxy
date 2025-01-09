@@ -1,5 +1,5 @@
 #
-# Modified by akquinet GmbH on 18.04.2023
+# Modified by akquinet GmbH on 14.08.2024
 #
 # Originally from https://github.com/matrix-org/sytest
 #
@@ -474,6 +474,10 @@ server {
         logLevelResetConfig => {
           logLevelResetDelayInSeconds => 5,
           resetLogLevel => "INFO"
+        },
+        timAuthorizationCheckConfiguration => {
+          concept => "CLIENT",
+          inviteRejectionPolicy => "ALLOW_ALL"
         }
     });
 

@@ -16,35 +16,21 @@
 
 package de.akquinet.tim.proxy
 
+import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
+import de.akquinet.tim.proxy.federation.BerechtigungsstufeEinsAuthenticationProvider
+import de.akquinet.tim.proxy.federation.BerechtigungsstufeEinsAuthenticationProvider.ProxyMode
 import de.akquinet.tim.proxy.federation.Destination
-import de.akquinet.tim.proxy.federation.FederationListCache
-import de.akquinet.tim.proxy.federation.MatrixFederationCheckAuth.Mode.OUTBOUND
 import de.akquinet.tim.proxy.federation.OutboundFederationRoutes
-import de.akquinet.tim.proxy.federation.matrixFederationCheckAuth
-import io.ktor.client.HttpClient
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.URLBuilder
-import io.ktor.http.URLProtocol
-import io.ktor.http.Url
-import io.ktor.http.takeFrom
-import io.ktor.server.application.Application
-import io.ktor.server.application.call
-import io.ktor.server.application.install
-import io.ktor.server.auth.Authentication
-import io.ktor.server.auth.authenticate
-import io.ktor.server.engine.ApplicationEngine
-import io.ktor.server.engine.ApplicationEngineEnvironmentBuilder
-import io.ktor.server.engine.applicationEngineEnvironment
-import io.ktor.server.engine.connector
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.netty.Netty
-import io.ktor.server.request.ApplicationRequest
-import io.ktor.server.request.httpMethod
-import io.ktor.server.request.receive
-import io.ktor.server.request.uri
-import io.ktor.server.response.respond
-import io.ktor.server.routing.route
+import de.akquinet.tim.proxy.federation.berechtigungsstufeEinsCheck
+import io.ktor.client.*
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.auth.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 import mu.KotlinLogging
 import net.folivo.trixnity.api.server.matrixApiServer
@@ -60,7 +46,7 @@ interface OutboundProxy {
 @Suppress("ExtractKtorModule")
 class OutboundProxyImpl(
     private val outboundProxyConfiguration: ProxyConfiguration.OutboundProxyConfiguration,
-    private val federationListCache: FederationListCache,
+    private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService,
     private val outboundFederationRoutes: OutboundFederationRoutes,
     private val outboundProxyCertificateManager: OutboundProxyCertificateManager,
     private val httpClient: HttpClient
@@ -84,7 +70,7 @@ class OutboundProxyImpl(
                 configureMatrixFederationCheckAuth()
 
                 matrixApiServer(Json) {
-                    authenticate("federation-check") {
+                    authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
                         outboundFederationRoutes.apply { serverServerApiRoutes() }
                         outboundFederationRoutes.apply { serverServerRawDataRoutes() }
                     }
@@ -118,8 +104,7 @@ class OutboundProxyImpl(
 
                                 kLog.warn("outbound request on unhandled path {} with method {} from host {}, body {} and headers {}",
                                     call.request.uri, call.request.httpMethod, host, requestBody, headerList)
-                                kLog.debug("outbound request on unhandled path {} with method {} from host {}, body {} and headers {}",
-                                    call.request.uri, call.request.httpMethod, host, requestBody, headerList)
+
                                 throw MatrixServerException(HttpStatusCode.NotFound, ErrorResponse.NotFound())
                             }
 
@@ -136,9 +121,8 @@ class OutboundProxyImpl(
 
     private fun Application.configureMatrixFederationCheckAuth() {
         install(Authentication) {
-            matrixFederationCheckAuth("federation-check") {
-                federationAllowed = federationListCache.domains
-                mode = OUTBOUND
+            berechtigungsstufeEinsCheck(checkerService = berechtigungsstufeEinsService) {
+                proxyMode = ProxyMode.OUTBOUND
                 enforceDomainList = outboundProxyConfiguration.enforceDomainList
             }
         }

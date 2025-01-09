@@ -16,37 +16,29 @@
 
 package de.akquinet.tim.proxy
 
-import io.ktor.client.HttpClient
-import io.ktor.client.request.request
-import io.ktor.client.request.setBody
-import io.ktor.client.request.url
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.client.statement.bodyAsText
-import io.ktor.client.utils.buildHeaders
-import io.ktor.http.Headers
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.Url
-import io.ktor.http.content.OutgoingContent
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.request.ApplicationRequest
-import io.ktor.server.request.httpMethod
-import io.ktor.server.request.httpVersion
-import io.ktor.server.request.receive
-import io.ktor.server.request.uri
-import io.ktor.server.response.respond
-import io.ktor.util.toByteArray
-import io.ktor.utils.io.ByteReadChannel
-import io.ktor.utils.io.ByteWriteChannel
-import io.ktor.utils.io.copyAndClose
+import de.akquinet.tim.proxy.extensions.filterUnsafeHeaders
+import de.akquinet.tim.proxy.extensions.isChunkedTransferEncoding
+import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.http.content.*
+import io.ktor.server.application.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.util.*
+import io.ktor.utils.io.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
+import org.koin.core.time.measureTimedValue
 
 private val log = KotlinLogging.logger { }
 private val chunkedEncodingBodyMessage = "body is empty because of chunkedTransferEncoding".toByteArray()
 
+/**
+ * Forwards an incoming request, and relays the destination's response.
+ */
 suspend fun forwardRequest(
     call: ApplicationCall,
     httpClient: HttpClient,
@@ -54,23 +46,67 @@ suspend fun forwardRequest(
     bodyJson: ByteArray?
 ): Quadruple<ApplicationRequest, HttpResponse, Long, Int> {
     val start = System.nanoTime()
-    val requestBody = bodyJson ?: call.receive<ByteArray>()
+    val requestBody: ByteArray = bodyJson ?: call.receive()
 
     val response =
         httpClient.request {
             method = call.request.httpMethod
             url(destinationUrl)
-            val requestHeaders = call.request.headers.filterUnsafeHeaders()
-            requestLog(call, destinationUrl, requestBody, requestHeaders)
-            setBody(object : OutgoingContent.ByteArrayContent() {
-                override val headers: Headers = requestHeaders
-                override fun bytes(): ByteArray = requestBody
-            })
+            val requestHeaders = call.request.headers
+            val safeRequestHeaders = requestHeaders.filterUnsafeHeaders()
+            logIncomingRequest(call, destinationUrl, requestBody, requestHeaders)
+            headers { appendAll(safeRequestHeaders) }
+            setBody(requestBody)
         }
-    createResponse(response, call)
-    responseLog(call, destinationUrl, response)
+    sendResponse(response, call)
+    logOutgoingResponse(call, destinationUrl, response)
 
     return Quadruple(call.request, response, (System.nanoTime() - start) / 1000000, response.bodyAsText().length)
+}
+
+/**
+ * Forwards an incoming request, and relays the destination's response. Empty
+ * 'OK' responses have their body replaced with defaultResponseText.
+ */
+suspend fun forwardRequestWithDefaultResponse(
+    call: ApplicationCall,
+    httpClient: HttpClient,
+    destinationUrl: Url,
+    defaultResponseText: String,
+    bodyJson: ByteArray?
+): Quadruple<ApplicationRequest, HttpResponse, Long, Int> {
+    val (response, elapsedMilliseconds) = measureTimedValue {
+        val requestBody: ByteArray = bodyJson ?: call.receive()
+
+        val homeserverResponse =
+            httpClient.request {
+                method = call.request.httpMethod
+                url(destinationUrl)
+                val requestHeaders = call.request.headers
+                logIncomingRequest(call, destinationUrl, requestBody, requestHeaders)
+                headers { appendAll(requestHeaders) }
+                setBody(requestBody)
+            }
+
+        if (homeserverResponse.status == HttpStatusCode.NotFound) {
+            call.respondText(
+                status = HttpStatusCode.OK,
+                contentType = ContentType.Application.Json,
+                text = defaultResponseText,
+            )
+        } else {
+            sendResponse(homeserverResponse, call)
+        }
+        logOutgoingResponse(call, destinationUrl, homeserverResponse)
+        homeserverResponse
+    }
+
+    return Quadruple(
+        call.request,
+        response,
+        elapsedMilliseconds.toLong(),
+        response.bodyAsText().length
+    )
 }
 
 suspend fun forwardRequestWithoutCallReceival(
@@ -85,53 +121,50 @@ suspend fun forwardRequestWithoutCallReceival(
             method = call.request.httpMethod
             url(destinationUrl)
             val requestHeaders = call.request.headers
-            val requestBody = call.request.receiveChannel().toByteArray()
+            val safeRequestHeaders = requestHeaders.filterUnsafeHeaders()
 
             if (requestHeaders.isChunkedTransferEncoding) {
-                requestLog(call, destinationUrl, chunkedEncodingBodyMessage, requestHeaders)
+                logIncomingRequest(call, destinationUrl, chunkedEncodingBodyMessage, requestHeaders)
                 setBody(object : OutgoingContent.WriteChannelContent() {
-                    override val headers: Headers = requestHeaders.filterUnsafeHeaders()
+                    override val headers: Headers = safeRequestHeaders
                     override suspend fun writeTo(channel: ByteWriteChannel) {
                         call.request.receiveChannel().copyAndClose(channel)
                     }
                 })
             } else {
-                requestLog(call, destinationUrl, requestBody, requestHeaders)
-                setBody(object : OutgoingContent.ByteArrayContent() {
-                    override val headers: Headers = requestHeaders.filterUnsafeHeaders()
-                    override fun bytes(): ByteArray = requestBody
-                })
+                val requestBody = call.request.receiveChannel().toByteArray()
+                logIncomingRequest(call, destinationUrl, requestBody, requestHeaders)
+                headers { appendAll(safeRequestHeaders) }
+                setBody(requestBody)
             }
         }
-    createResponse(response, call)
-    responseLog(call, destinationUrl, response)
+    sendResponse(response, call)
+    logOutgoingResponse(call, destinationUrl, response)
 
     return Quadruple(call.request, response, (System.nanoTime() - start) / 1000000, response.bodyAsText().length)
 }
 
-private suspend fun createResponse(
+private suspend fun sendResponse(
     response: HttpResponse,
     call: ApplicationCall
 ) {
     val responseHeaders = response.headers
+    val safeRequestHeaders = responseHeaders.filterUnsafeHeaders()
     if (responseHeaders.isChunkedTransferEncoding) {
         val body = response.bodyAsChannel()
         call.respond(object : OutgoingContent.ReadChannelContent() {
-            override val headers: Headers = responseHeaders.filterUnsafeHeaders()
+            override val headers: Headers = safeRequestHeaders
             override val status: HttpStatusCode = response.status
             override fun readFrom(): ByteReadChannel = body
         })
     } else {
-        val body = response.bodyAsChannel().toByteArray()
-        call.respond(object : OutgoingContent.ByteArrayContent() {
-            override val headers: Headers = responseHeaders.filterUnsafeHeaders()
-            override val status: HttpStatusCode = response.status
-            override fun bytes(): ByteArray = body
-        })
+        val body: ByteArray = response.bodyAsChannel().toByteArray()
+        call.response.headers.appendAll(safeRequestHeaders)
+        call.respondBytes(body, response.contentType(), response.status)
     }
 }
 
-suspend fun responseLog(call: ApplicationCall, destinationUrl: Url, response: HttpResponse) =
+private fun logOutgoingResponse(call: ApplicationCall, destinationUrl: Url, response: HttpResponse) =
     runBlocking { // this: CoroutineScope
         launch {
             val responseBody = response.bodyAsText()
@@ -144,7 +177,12 @@ suspend fun responseLog(call: ApplicationCall, destinationUrl: Url, response: Ht
         }
     }
 
-private fun requestLog(call: ApplicationCall, destinationUrl: Url, requestBody: ByteArray, requestHeaders: Headers) {
+private fun logIncomingRequest(
+    call: ApplicationCall,
+    destinationUrl: Url,
+    requestBody: ByteArray,
+    requestHeaders: Headers
+) {
     log.debug {
         "Received ${call.request.httpMethod.value}-Request with ${call.request.httpVersion} \n" +
                 "to $destinationUrl \n" +
@@ -153,11 +191,6 @@ private fun requestLog(call: ApplicationCall, destinationUrl: Url, requestBody: 
     }
 }
 
-private fun Headers.filterUnsafeHeaders() =
-    buildHeaders {
-        appendAll(this@filterUnsafeHeaders)
-        HttpHeaders.UnsafeHeadersList.forEach { remove(it) }
-    }
-
-private val Headers.isChunkedTransferEncoding: Boolean
-    get() = get(HttpHeaders.TransferEncoding)?.contains("chunked") ?: false
+private fun ResponseHeaders.appendAll(headers: Headers) {
+    headers.forEach { name, values -> values.forEach { append(name, it) } }
+}

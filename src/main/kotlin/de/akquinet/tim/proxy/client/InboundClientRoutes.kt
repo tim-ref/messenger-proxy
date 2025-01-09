@@ -17,15 +17,11 @@
 package de.akquinet.tim.proxy.client
 
 import de.akquinet.tim.proxy.*
-import de.akquinet.tim.proxy.client.model.route.GetThirdPartyProtocols
-import de.akquinet.tim.proxy.client.model.route.RoomJoin
-import de.akquinet.tim.proxy.client.model.route.SsoCallback
-import de.akquinet.tim.proxy.rawdata.RawDataService
-import de.akquinet.tim.proxy.rawdata.model.Operation
-import de.akquinet.tim.proxy.client.model.route.ChangeVisibilityAppServiceRoom
-import de.akquinet.tim.proxy.client.model.route.EventsR0
-import de.akquinet.tim.proxy.client.model.route.GetEmailRequestTokenFor3Pid
-import de.akquinet.tim.proxy.client.model.route.InviteUserWith3pidOption
+import de.akquinet.tim.proxy.ProxyConfiguration.TimAuthorizationCheckConfiguration
+import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
+import de.akquinet.tim.proxy.client.model.route.*
+import de.akquinet.tim.proxy.client.model.route.account_data.AccountDataType
+import de.akquinet.tim.proxy.client.model.route.account_data.PermissionConfig
 import de.akquinet.tim.proxy.client.model.route.cas.CasRedirect
 import de.akquinet.tim.proxy.client.model.route.cas.CasTicket
 import de.akquinet.tim.proxy.client.model.route.pushrules.GetPushRuleWithoutId
@@ -33,157 +29,74 @@ import de.akquinet.tim.proxy.client.model.route.pushrules.GetPushRulesForScope
 import de.akquinet.tim.proxy.client.model.route.thirdparty.GetLocationFromThirdParty
 import de.akquinet.tim.proxy.client.model.route.thirdparty.GetThirdPartyProtocolByName
 import de.akquinet.tim.proxy.client.model.route.thirdparty.GetUserFromThirdParty
-import io.ktor.client.HttpClient
+import de.akquinet.tim.proxy.rawdata.RawDataService
+import de.akquinet.tim.proxy.rawdata.model.Operation
+import io.ktor.client.*
 import io.ktor.http.*
-import io.ktor.server.application.call
+import io.ktor.server.application.*
+import io.ktor.server.auth.*
 import io.ktor.server.request.*
-import io.ktor.server.routing.Route
+import io.ktor.server.routing.*
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import net.folivo.trixnity.api.server.matrixEndpointResource
-import net.folivo.trixnity.clientserverapi.model.authentication.AddThirdPartyIdentifiers
-import net.folivo.trixnity.clientserverapi.model.authentication.BindThirdPartyIdentifiers
-import net.folivo.trixnity.clientserverapi.model.authentication.ChangePassword
-import net.folivo.trixnity.clientserverapi.model.authentication.DeactivateAccount
-import net.folivo.trixnity.clientserverapi.model.authentication.DeleteThirdPartyIdentifiers
-import net.folivo.trixnity.clientserverapi.model.authentication.GetEmailRequestTokenForPassword
-import net.folivo.trixnity.clientserverapi.model.authentication.GetEmailRequestTokenForRegistration
-import net.folivo.trixnity.clientserverapi.model.authentication.GetLoginTypes
-import net.folivo.trixnity.clientserverapi.model.authentication.GetMsisdnRequestTokenForPassword
-import net.folivo.trixnity.clientserverapi.model.authentication.GetMsisdnRequestTokenForRegistration
-import net.folivo.trixnity.clientserverapi.model.authentication.GetOIDCRequestToken
-import net.folivo.trixnity.clientserverapi.model.authentication.GetThirdPartyIdentifiers
-import net.folivo.trixnity.clientserverapi.model.authentication.IsRegistrationTokenValid
-import net.folivo.trixnity.clientserverapi.model.authentication.IsUsernameAvailable
-import net.folivo.trixnity.clientserverapi.model.authentication.Login
-import net.folivo.trixnity.clientserverapi.model.authentication.Logout
-import net.folivo.trixnity.clientserverapi.model.authentication.LogoutAll
-import net.folivo.trixnity.clientserverapi.model.authentication.Refresh
-import net.folivo.trixnity.clientserverapi.model.authentication.Register
-import net.folivo.trixnity.clientserverapi.model.authentication.SSORedirect
-import net.folivo.trixnity.clientserverapi.model.authentication.SSORedirectTo
-import net.folivo.trixnity.clientserverapi.model.authentication.UnbindThirdPartyIdentifiers
-import net.folivo.trixnity.clientserverapi.model.authentication.WhoAmI
-import net.folivo.trixnity.clientserverapi.model.devices.DeleteDevice
-import net.folivo.trixnity.clientserverapi.model.devices.DeleteDevices
-import net.folivo.trixnity.clientserverapi.model.devices.GetDevice
-import net.folivo.trixnity.clientserverapi.model.devices.GetDevices
-import net.folivo.trixnity.clientserverapi.model.devices.UpdateDevice
+import net.folivo.trixnity.clientserverapi.model.authentication.*
+import net.folivo.trixnity.clientserverapi.model.devices.*
 import net.folivo.trixnity.clientserverapi.model.discovery.GetWellKnown
-import net.folivo.trixnity.clientserverapi.model.keys.AddSignatures
-import net.folivo.trixnity.clientserverapi.model.keys.ClaimKeys
-import net.folivo.trixnity.clientserverapi.model.keys.DeleteRoomKeyBackup
-import net.folivo.trixnity.clientserverapi.model.keys.DeleteRoomKeyBackupData
-import net.folivo.trixnity.clientserverapi.model.keys.DeleteRoomKeyBackupVersion
-import net.folivo.trixnity.clientserverapi.model.keys.DeleteRoomsKeyBackup
-import net.folivo.trixnity.clientserverapi.model.keys.GetKeyChanges
-import net.folivo.trixnity.clientserverapi.model.keys.GetKeys
-import net.folivo.trixnity.clientserverapi.model.keys.GetRoomKeyBackup
-import net.folivo.trixnity.clientserverapi.model.keys.GetRoomKeyBackupData
-import net.folivo.trixnity.clientserverapi.model.keys.GetRoomKeyBackupVersion
-import net.folivo.trixnity.clientserverapi.model.keys.GetRoomKeyBackupVersionByVersion
-import net.folivo.trixnity.clientserverapi.model.keys.GetRoomsKeyBackup
-import net.folivo.trixnity.clientserverapi.model.keys.SetCrossSigningKeys
-import net.folivo.trixnity.clientserverapi.model.keys.SetKeys
-import net.folivo.trixnity.clientserverapi.model.keys.SetRoomKeyBackup
-import net.folivo.trixnity.clientserverapi.model.keys.SetRoomKeyBackupData
-import net.folivo.trixnity.clientserverapi.model.keys.SetRoomKeyBackupVersion
-import net.folivo.trixnity.clientserverapi.model.keys.SetRoomKeyBackupVersionByVersion
-import net.folivo.trixnity.clientserverapi.model.keys.SetRoomsKeyBackup
-import net.folivo.trixnity.clientserverapi.model.media.DownloadMedia
-import net.folivo.trixnity.clientserverapi.model.media.DownloadThumbnail
-import net.folivo.trixnity.clientserverapi.model.media.GetMediaConfig
-import net.folivo.trixnity.clientserverapi.model.media.GetUrlPreview
-import net.folivo.trixnity.clientserverapi.model.media.UploadMedia
-import net.folivo.trixnity.clientserverapi.model.push.DeletePushRule
-import net.folivo.trixnity.clientserverapi.model.push.GetNotifications
-import net.folivo.trixnity.clientserverapi.model.push.GetPushRule
-import net.folivo.trixnity.clientserverapi.model.push.GetPushRuleActions
-import net.folivo.trixnity.clientserverapi.model.push.GetPushRuleEnabled
-import net.folivo.trixnity.clientserverapi.model.push.GetPushRules
-import net.folivo.trixnity.clientserverapi.model.push.GetPushers
-import net.folivo.trixnity.clientserverapi.model.push.SetPushRule
-import net.folivo.trixnity.clientserverapi.model.push.SetPushRuleActions
-import net.folivo.trixnity.clientserverapi.model.push.SetPushRuleEnabled
-import net.folivo.trixnity.clientserverapi.model.push.SetPushers
-import net.folivo.trixnity.clientserverapi.model.rooms.BanUser
-import net.folivo.trixnity.clientserverapi.model.rooms.CreateRoom
-import net.folivo.trixnity.clientserverapi.model.rooms.DeleteRoomAlias
-import net.folivo.trixnity.clientserverapi.model.rooms.DeleteRoomTag
-import net.folivo.trixnity.clientserverapi.model.rooms.ForgetRoom
-import net.folivo.trixnity.clientserverapi.model.rooms.GetDirectoryVisibility
-import net.folivo.trixnity.clientserverapi.model.rooms.GetEvent
-import net.folivo.trixnity.clientserverapi.model.rooms.GetEventContext
-import net.folivo.trixnity.clientserverapi.model.rooms.GetEvents
-import net.folivo.trixnity.clientserverapi.model.rooms.GetHierarchy
-import net.folivo.trixnity.clientserverapi.model.rooms.GetJoinedMembers
-import net.folivo.trixnity.clientserverapi.model.rooms.GetJoinedRooms
-import net.folivo.trixnity.clientserverapi.model.rooms.GetMembers
-import net.folivo.trixnity.clientserverapi.model.rooms.GetPublicRooms
-import net.folivo.trixnity.clientserverapi.model.rooms.GetPublicRoomsWithFilter
-import net.folivo.trixnity.clientserverapi.model.rooms.GetRelations
-import net.folivo.trixnity.clientserverapi.model.rooms.GetRelationsByRelationType
-import net.folivo.trixnity.clientserverapi.model.rooms.GetRelationsByRelationTypeAndEventType
-import net.folivo.trixnity.clientserverapi.model.rooms.GetRoomAccountData
-import net.folivo.trixnity.clientserverapi.model.rooms.GetRoomAlias
-import net.folivo.trixnity.clientserverapi.model.rooms.GetRoomAliases
-import net.folivo.trixnity.clientserverapi.model.rooms.GetRoomTags
-import net.folivo.trixnity.clientserverapi.model.rooms.GetState
-import net.folivo.trixnity.clientserverapi.model.rooms.GetStateEvent
-import net.folivo.trixnity.clientserverapi.model.rooms.JoinRoom
-import net.folivo.trixnity.clientserverapi.model.rooms.KickUser
-import net.folivo.trixnity.clientserverapi.model.rooms.KnockRoom
-import net.folivo.trixnity.clientserverapi.model.rooms.LeaveRoom
-import net.folivo.trixnity.clientserverapi.model.rooms.RedactEvent
-import net.folivo.trixnity.clientserverapi.model.rooms.ReportEvent
-import net.folivo.trixnity.clientserverapi.model.rooms.SendMessageEvent
-import net.folivo.trixnity.clientserverapi.model.rooms.SendStateEvent
-import net.folivo.trixnity.clientserverapi.model.rooms.SetDirectoryVisibility
-import net.folivo.trixnity.clientserverapi.model.rooms.SetReadMarkers
-import net.folivo.trixnity.clientserverapi.model.rooms.SetReceipt
-import net.folivo.trixnity.clientserverapi.model.rooms.SetRoomAccountData
-import net.folivo.trixnity.clientserverapi.model.rooms.SetRoomAlias
-import net.folivo.trixnity.clientserverapi.model.rooms.SetRoomTag
-import net.folivo.trixnity.clientserverapi.model.rooms.SetTyping
-import net.folivo.trixnity.clientserverapi.model.rooms.UnbanUser
-import net.folivo.trixnity.clientserverapi.model.rooms.UpgradeRoom
+import net.folivo.trixnity.clientserverapi.model.keys.*
+import net.folivo.trixnity.clientserverapi.model.media.*
+import net.folivo.trixnity.clientserverapi.model.push.*
+import net.folivo.trixnity.clientserverapi.model.rooms.*
 import net.folivo.trixnity.clientserverapi.model.server.GetCapabilities
 import net.folivo.trixnity.clientserverapi.model.server.GetVersions
 import net.folivo.trixnity.clientserverapi.model.server.Search
 import net.folivo.trixnity.clientserverapi.model.server.WhoIs
 import net.folivo.trixnity.clientserverapi.model.sync.Sync
-import net.folivo.trixnity.clientserverapi.model.users.GetAvatarUrl
-import net.folivo.trixnity.clientserverapi.model.users.GetDisplayName
-import net.folivo.trixnity.clientserverapi.model.users.GetFilter
-import net.folivo.trixnity.clientserverapi.model.users.GetGlobalAccountData
-import net.folivo.trixnity.clientserverapi.model.users.GetPresence
-import net.folivo.trixnity.clientserverapi.model.users.GetProfile
-import net.folivo.trixnity.clientserverapi.model.users.SearchUsers
-import net.folivo.trixnity.clientserverapi.model.users.SendToDevice
-import net.folivo.trixnity.clientserverapi.model.users.SetAvatarUrl
-import net.folivo.trixnity.clientserverapi.model.users.SetDisplayName
-import net.folivo.trixnity.clientserverapi.model.users.SetFilter
-import net.folivo.trixnity.clientserverapi.model.users.SetGlobalAccountData
-import net.folivo.trixnity.clientserverapi.model.users.SetPresence
+import net.folivo.trixnity.clientserverapi.model.users.*
 import net.folivo.trixnity.core.ErrorResponse
 import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.core.MatrixServerException
+import net.folivo.trixnity.core.model.UserId
 
-fun interface InboundClientRoutes {
+interface InboundClientRoutes {
     fun Route.clientServerApiRoutes()
+    fun Route.openClientServerApiRoutes()
 }
 
 class InboundClientRoutesImpl(
     private val config: ProxyConfiguration.InboundProxyConfiguration,
     private val logConfiguration: ProxyConfiguration.LogInfoConfig,
+    val timAuthorizationCheckConfiguration: TimAuthorizationCheckConfiguration,
     private val httpClient: HttpClient,
-    private val rawDataService: RawDataService
+    private val rawDataService: RawDataService,
+    private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService
 ) : InboundClientRoutes {
 
     private fun ApplicationRequest.getDestinationUrl(): Url = uri.mergeToUrl(config.homeserverUrl)
 
+    override fun Route.openClientServerApiRoutes() {
+        // TODO @veronika.bertels: so kann das aus meiner Sicht nicht bleiben, weil m.login.sso variabel ist. Behebt aber erstmal das Problem.
+        get("/_matrix/client/v3/auth/m.login.sso/fallback/{...}") {
+            forwardRequest(
+                call = call,
+                httpClient = httpClient,
+                destinationUrl = call.request.uri.mergeToUrl(config.homeserverUrl),
+                bodyJson = null
+            )
+        }
+
+        forwardEndpointWithoutCallRecieval<DownloadMedia>()
+        forwardEndpoint<DownloadThumbnail>()
+    }
+
     override fun Route.clientServerApiRoutes() {
+        // Berechtigungsstufe 1
+        createRoom()
+        inviteUser()
+
         // authentication
         authenticationRoutes()
 
@@ -213,6 +126,107 @@ class InboundClientRoutesImpl(
 
         // users
         usersRoutes()
+    }
+
+    private fun Route.createRoom() {
+        matrixEndpointResource<CreateRoom> {
+            val inviter = call.principal<UserIdPrincipal>()
+                ?: throw MatrixServerException(
+                    statusCode = HttpStatusCode.Unauthorized,
+                    errorResponse = ErrorResponse.Unauthorized()
+                )
+            val requestBody = call.receiveText()
+            val request = Json.decodeFromString<JsonObject>(requestBody)
+            val (userId, rawdataOperation) = extractInvitedDetails(request)
+
+            val relevantDomains = userId?.let {
+                setOf(it.domain, inviter.userId.domain)
+            } ?: setOf(inviter.userId.domain)
+            if (config.enforceDomainList && !berechtigungsstufeEinsService.areDomainsFederated(relevantDomains)) {
+                throw MatrixServerException(
+                    statusCode = HttpStatusCode.Forbidden,
+                    errorResponse = ErrorResponse.Forbidden("${userId ?: "unbekannter Benutzer"} konnte nicht eingeladen werden. Die Förderationsliste enthält nicht alle Domains: ${relevantDomains.joinToString()}.")
+                )
+            }
+
+            forwardRequest(
+                call, httpClient, call.request.getDestinationUrl(), requestBody.toByteArray()
+            ).let {
+                rawDataService.serverRawDataForward(
+                    request = it.first,
+                    response = it.second,
+                    duration = it.third,
+                    timOperation = rawdataOperation,
+                    sizeOut = it.fourth
+                )
+            }
+        }
+    }
+
+    private fun extractInvitedDetails(request: JsonObject): Pair<UserId?, Operation> {
+        val invited = request["invite"]?.jsonArray?.map {
+            it.jsonPrimitive.content.let(::UserId)
+        }?.toSet() ?: emptySet()
+
+        if (invited.size > 1) {
+            throw MatrixServerException(
+                statusCode = HttpStatusCode.Forbidden,
+                errorResponse = ErrorResponse.Forbidden("Es darf nur maximal ein anderer Teilnehmer eingeladen werden.")
+            )
+        }
+
+        val rawdataOperation = if (invited.isEmpty()) {
+            Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION
+        } else {
+            if (invited.first().full.contains(logConfiguration.homeFQDN)) {
+                Operation.MP_INVITE_WITHIN_ORGANISATION_INVITE
+            } else {
+                Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER
+            }
+        }
+
+        return Pair(invited.firstOrNull(), rawdataOperation)
+    }
+
+    private fun Route.inviteUser() {
+        matrixEndpointResource<InviteUser> {
+            val inviter = call.principal<UserIdPrincipal>()
+                ?: throw MatrixServerException(
+                    statusCode = HttpStatusCode.Unauthorized,
+                    errorResponse = ErrorResponse.Unauthorized()
+                )
+
+            val requestBody = call.receiveText()
+
+            val request = Json.decodeFromString<JsonObject>(requestBody)
+            val invited =
+                checkNotNull(request["user_id"]?.jsonPrimitive?.content?.let(::UserId)) {
+                    "Required value InviteUser.Request.userId is null"
+                }
+
+            if (config.enforceDomainList && !berechtigungsstufeEinsService.areDomainsFederated(setOf(invited.domain, inviter.userId.domain))) {
+                throw MatrixServerException(
+                    statusCode = HttpStatusCode.Forbidden,
+                    errorResponse = ErrorResponse.Forbidden("$invited konnte nicht eingeladen werden")
+                )
+            }
+
+            forwardRequest(
+                call, httpClient, call.request.getDestinationUrl(), requestBody.toByteArray()
+            ).let {
+                rawDataService.serverRawDataForward(
+                    request = it.first,
+                    response = it.second,
+                    duration = it.third,
+                    timOperation = if (invited.full.contains(logConfiguration.homeFQDN)) {
+                        Operation.MP_INVITE_WITHIN_ORGANISATION_INVITE
+                    } else {
+                        Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER
+                    },
+                    sizeOut = it.fourth
+                )
+            }
+        }
     }
 
     private fun Route.authenticationRoutes() {
@@ -284,8 +298,6 @@ class InboundClientRoutesImpl(
     private fun Route.mediaRoutes() {
         forwardEndpoint<GetMediaConfig>()
         forwardEndpointWithoutCallRecieval<UploadMedia>()
-        forwardEndpointWithoutCallRecieval<DownloadMedia>()
-        forwardEndpoint<DownloadThumbnail>()
         forwardEndpoint<GetUrlPreview>()
     }
 
@@ -319,14 +331,11 @@ class InboundClientRoutesImpl(
 
         forwardWithRawData<SendMessageEvent>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<RedactEvent>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
-        forwardWithRawData<CreateRoom>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<SetRoomAlias>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<GetRoomAlias>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<GetRoomAliases>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<DeleteRoomAlias>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<GetJoinedRooms>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
-
-        inviteUser()
 
         forwardWithRawData<KickUser>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<BanUser>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
@@ -380,7 +389,7 @@ class InboundClientRoutesImpl(
         forwardEndpoint<SendToDevice>()
         forwardEndpoint<GetFilter>()
         forwardEndpoint<SetFilter>()
-        forwardEndpoint<GetGlobalAccountData>()
+        getGlobalAccountData()
         forwardEndpoint<SetGlobalAccountData>()
         forwardWithRawData<SearchUsers>(Operation.MP_INVITE_WITHIN_ORGANISATION_SEARCH)
 
@@ -397,30 +406,6 @@ class InboundClientRoutesImpl(
         forwardEndpoint<CasTicket>()
     }
 
-
-    private fun Route.inviteUser() {
-        matrixEndpointResource<InviteUserWith3pidOption> {
-            val requestBody = call.receive<JsonObject>()
-            val userId = requestBody["user_id"]
-            forwardRequest(
-                call,
-                httpClient,
-                call.request.getDestinationUrl(),
-                requestBody.toString().toByteArray()
-            ).let {
-                rawDataService.serverRawDataForward(
-                    it.first, it.second, it.third,
-                    if (userId?.jsonPrimitive?.content?.contains(logConfiguration.homeFQDN) == true) {
-                        Operation.MP_INVITE_WITHIN_ORGANISATION_INVITE
-                    } else {
-                        Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER
-                    },
-                    it.fourth
-                )
-            }
-        }
-    }
-
     private fun Route.setPresence() {
         matrixEndpointResource<SetPresence> {
             val requestBody = call.receiveText()
@@ -430,11 +415,36 @@ class InboundClientRoutesImpl(
 
 
             if (preConditionFailed) {
-                throw MatrixServerException(HttpStatusCode.Forbidden, ErrorResponse.Forbidden())
+                throw MatrixServerException(
+                    HttpStatusCode.Forbidden,
+                    ErrorResponse.TooLarge("'status_msg' is longer than 250 characters.")
+                )
             }
 
             forwardRequest(call, httpClient, call.request.getDestinationUrl(), requestBody.toByteArray())
+        }
+    }
 
+    private fun Route.getGlobalAccountData() {
+        matrixEndpointResource<GetGlobalAccountData> {
+            val accountDataType = call.parameters["type"]
+            if (AccountDataType.PERMISSION_CONFIG.type == accountDataType) {
+                val defaultPermissions = PermissionConfig(timAuthorizationCheckConfiguration)
+                forwardRequestWithDefaultResponse(
+                    call = call,
+                    httpClient = httpClient,
+                    destinationUrl = call.request.getDestinationUrl(),
+                    defaultResponseText = Json.encodeToString(defaultPermissions),
+                    bodyJson = call.receiveText().toByteArray()
+                )
+            } else {
+                forwardRequest(
+                    call = call,
+                    httpClient = httpClient,
+                    destinationUrl = call.request.getDestinationUrl(),
+                    bodyJson = call.receiveText().toByteArray()
+                )
+            }
         }
     }
 

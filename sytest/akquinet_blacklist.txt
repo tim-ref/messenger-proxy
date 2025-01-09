@@ -146,6 +146,22 @@ AS and main public room lists are separate
 # Flaky as of https://github.com/matrix-org/sytest/issues/1364
 If a device list update goes missing, the server resyncs on the next one
 
+# tests fail cause 3pids are not allowed for TI-M
+Can invite existing 3pid
+Can invite existing 3pid with no ops into a private room
+Can accept third party invite with /join
+
+# tests fail cause TI-M allows only one userId with INVITED state on createRoom
+#
+# https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-Messenger-FD/gemSpec_TI-Messenger-FD_V1.1.1/#5.1.2.1.8
+#
+# "Der Messenger-Proxy MUSS bei jedem createRoom-Event gemäß [Client-Server API#Rooms] den Inhalt der Anfrage an den
+# Matrix-Homeserver prüfen. Hierbei MUSS der Messenger-Proxy prüfen, ob das im Event enthaltene Attribut "invite" mit
+# maximal einem Element befüllt ist. Ist die Prüfung nicht erfolgreich, MUSS der Messenger-Proxy an den
+# TI-Messenger-Client das folgenden JSON-Objekt zurückgeben: ..."
+/joined_members return joined members
+
+
 #### Synapse Blacklist ####
 
 # from https://github.com/matrix-org/synapse/blob/develop/sytest-blacklist

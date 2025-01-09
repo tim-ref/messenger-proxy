@@ -14,15 +14,10 @@
  * limitations under the License.
  */
 
-package de.akquinet.tim.proxy.mocks
+import kotlinx.serialization.Serializable
 
-import de.akquinet.tim.proxy.VZDPublicIDCheck
-
-class VZDPublicIDCheckMock: VZDPublicIDCheck {
-
-    var expectedResult = false
-
-    override suspend fun areMXIDsPublic(inviter: String, invited: String): Boolean {
-        return expectedResult
-    }
-}
+@Serializable
+data class InvitePermissionDto(
+    val invitingUser: String,
+    val invitedUser: String
+)

@@ -16,11 +16,13 @@
 
 package de.akquinet.tim.proxy.federation
 
+import de.akquinet.tim.ErrorResponse
 import de.akquinet.tim.proxy.ProxyConfiguration
-import de.akquinet.tim.proxy.federation.MatrixFederationCheckAuth.Mode.OUTBOUND
+import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.rawdata.model.RawDataMetaData
+import de.akquinet.tim.shouldEqualJsonMatrixStandard
 import io.kotest.assertions.assertSoftly
 import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
@@ -70,6 +72,8 @@ class OutboundFederationCheckerImplTest : ShouldSpec({
                                 }
                                 """
 
+    lateinit var bsEinsService: BerechtigungsstufeEinsService
+
     beforeTest {
         federationListCacheMock.domains.value = setOf()
     }
@@ -82,16 +86,16 @@ class OutboundFederationCheckerImplTest : ShouldSpec({
                 }
             }
             rawDataService = spyk(RawDataServiceImpl(logInfoConfig, client))
+            bsEinsService = BerechtigungsstufeEinsService(federationListCacheMock)
 
             application {
                 install(Authentication) {
-                    matrixFederationCheckAuth("federation-check") {
-                        federationAllowed = federationListCacheMock.domains
-                        mode = OUTBOUND
+                    berechtigungsstufeEinsCheck(checkerService = bsEinsService) {
+                        proxyMode = BerechtigungsstufeEinsAuthenticationProvider.ProxyMode.OUTBOUND
                     }
                 }
                 matrixApiServer(Json) {
-                    authenticate("federation-check") {
+                    authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
                         with(
                             OutboundFederationRoutesImpl(
                                 this@testApplication.client,
@@ -179,11 +183,15 @@ class OutboundFederationCheckerImplTest : ShouldSpec({
                 response.bodyAsText() shouldBe """{"one_time_keys":{}}"""
             }
         }
+        // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-Messenger-Dienst/gemSpec_TI-Messenger-Dienst_V1.1.1/#8.3
         should("deny unfederated domain") {
             withCut {
                 val response = client.postKeyClaimAuthenticated()
                 response.status shouldBe HttpStatusCode.Forbidden
-                response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"not part of federation"}"""
+                response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+                    errcode = "M_FORBIDDEN",
+                    error = "not part of federation"
+                )
             }
         }
     }
@@ -191,7 +199,10 @@ class OutboundFederationCheckerImplTest : ShouldSpec({
         withCut {
             val response = client.get("/blubs") { header(HttpHeaders.Host, externalHost) }
             response.status shouldBe HttpStatusCode.NotFound
-            response.bodyAsText() shouldBe """{"errcode":"M_UNRECOGNIZED","error":"unsupported (or unknown) endpoint"}"""
+            response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+                errcode = "M_UNRECOGNIZED",
+                error = "unsupported (or unknown) endpoint"
+            )
         }
     }
 })

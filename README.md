@@ -64,7 +64,7 @@ $ docker network create timref-network
 ```
 5. The application should be built at least once because the build artifact is used to create the docker image. This can be done like so:
     ```shell
-    $ ./mvnw clean package
+    $ ./mvnw clean install
     ```
    
 6. The components of this project can be started by using

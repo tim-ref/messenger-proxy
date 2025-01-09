@@ -47,10 +47,14 @@ object GetVersionsTransformer : BodyTransformer {
             .map { MatrixVersion(it) }
             .filter { it <= maxVersion }
 
-        val newBody = Json.encodeToString(
+        val json = Json {
+            encodeDefaults = true
+        }
+
+        val newBody = json.encodeToString(
             GetVersions.Response(
                 versions = filteredVersions.sorted().map { it.version },
-                unstableFeatures = originalVersions.unstableFeatures
+                unstableFeatures = mapOf()
             )
         )
 

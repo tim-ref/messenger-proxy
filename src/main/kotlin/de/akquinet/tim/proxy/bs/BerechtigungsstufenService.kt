@@ -13,16 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package de.akquinet.tim.proxy.bs
 
-package de.akquinet.tim.proxy.mocks
+import de.akquinet.tim.proxy.federation.FederationListCache
 
-import de.akquinet.tim.proxy.VZDPublicIDCheck
+class BerechtigungsstufeEinsService(
+    private val federationListCache: FederationListCache
+) {
 
-class VZDPublicIDCheckMock: VZDPublicIDCheck {
-
-    var expectedResult = false
-
-    override suspend fun areMXIDsPublic(inviter: String, invited: String): Boolean {
-        return expectedResult
-    }
+    fun areDomainsFederated(domains: Set<String>): Boolean = federationListCache.domains.value.containsAll(domains)
 }

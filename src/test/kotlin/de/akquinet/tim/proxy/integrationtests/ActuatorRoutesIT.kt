@@ -16,12 +16,10 @@
 
 package de.akquinet.tim.proxy.integrationtests
 
-import de.akquinet.tim.proxy.InboundProxyImpl
-import de.akquinet.tim.proxy.OutboundProxyCertificateManagerImpl
-import de.akquinet.tim.proxy.OutboundProxyImpl
-import de.akquinet.tim.proxy.ProxyConfiguration
+import de.akquinet.tim.proxy.*
 import de.akquinet.tim.proxy.actuator.ActuatorRoutesImpl
 import de.akquinet.tim.proxy.availability.RegistrationServiceHealthApi
+import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
@@ -34,15 +32,13 @@ import de.akquinet.tim.proxy.mocks.RawDataServiceStub
 import de.akquinet.tim.proxy.mocks.VZDPublicIDCheckMock
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
+import io.ktor.client.*
+import io.ktor.client.call.*
 import io.ktor.client.engine.okhttp.*
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logging
-import io.ktor.client.request.get
-import io.ktor.client.request.put
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.engine.ApplicationEngine
+import io.ktor.client.plugins.logging.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import io.ktor.server.engine.*
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
@@ -98,6 +94,7 @@ class ActuatorRoutesIT {
     private val regServiceHealthMockEngine = RegistrationServiceHealthApiMockEngine()
     private val regServiceHealthApi = RegistrationServiceHealthApi(regServiceHealthMockEngine.get(), regServerConfig)
 
+    private lateinit var bsEinsService: BerechtigungsstufeEinsService
     private lateinit var outboundApplicationEngine: ApplicationEngine
     private lateinit var inboundApplicationEngine: ApplicationEngine
     private lateinit var healthCheckApplicationEngine: ApplicationEngine
@@ -109,6 +106,11 @@ class ActuatorRoutesIT {
         synapsePort = 443,
         enforceDomainList = true,
         accessTokenToUserIdCacheDuration = 1.hours
+    )
+
+    private var timAuthorizationCheckConfiguration = ProxyConfiguration.TimAuthorizationCheckConfiguration(
+        TimAuthorizationCheckConcept.CLIENT,
+        InviteRejectionPolicy.ALLOW_ALL
     )
 
     private val embeddedPostgres: EmbeddedPostgres = EmbeddedPostgres.start()
@@ -135,10 +137,15 @@ class ActuatorRoutesIT {
             port = 1233,
             basePath = "/actuator"
         )
+        val timAuthorizationCheckConfiguration = ProxyConfiguration.TimAuthorizationCheckConfiguration(
+            concept = TimAuthorizationCheckConcept.CLIENT,
+            inviteRejectionPolicy = InviteRejectionPolicy.ALLOW_ALL
+        )
 
         Database.connect({ embeddedPostgres.postgresDatabase.connection })
 
         federationListCacheMock = FederationListCacheMock()
+        bsEinsService = BerechtigungsstufeEinsService(federationListCacheMock)
         rawDataServiceStub = RawDataServiceStub()
         // always trust server itself
         federationListCacheMock.domains.update { it + "$virtualHostname:$matrixHttpsPort" + "$externalMatrixHostname:$matrixHttpsPort" }
@@ -148,31 +155,34 @@ class ActuatorRoutesIT {
         outboundApplicationEngine =
             OutboundProxyImpl(
                 outboundProxyConfig,
-                federationListCacheMock,
+                bsEinsService,
                 OutboundFederationRoutesImpl(httpClient, rawDataServiceStub),
                 outboundProxyCertificateManager, httpClient
             ).start()
         inboundApplicationEngine =
             InboundProxyImpl(
                 inboundProxyConfiguration = inboundProxyConfig,
-                federationListCache = federationListCacheMock,
                 accessTokenToUserIdAuthenticationFunction = AccessTokenToUserIdAuthenticationFunctionImpl(
                     AccessTokenToUserIdImpl(inboundProxyConfig, MatrixApiClient())
                 ),
                 inboundClientRoutes = InboundClientRoutesImpl(
-                    inboundProxyConfig,
-                    logInfoConfig,
-                    httpClient,
-                    rawDataServiceStub
+                    config = inboundProxyConfig,
+                    logConfiguration = logInfoConfig,
+                    timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
+                    httpClient = httpClient,
+                    berechtigungsstufeEinsService = bsEinsService,
+                    rawDataService = rawDataServiceStub
                 ),
                 inboundFederationRoutes = InboundFederationRoutesImpl(
                     inboundProxyConfig,
                     httpClient,
                     rawDataServiceStub,
                     contactManagementServiceMock,
-                    vzdPublicIDCheckMock
+                    vzdPublicIDCheckMock,
+                    timAuthorizationCheckConfiguration
                 ),
-                httpClient = httpClient
+                httpClient = httpClient,
+                berechtigungsstufeEinsService = bsEinsService
             ).start()
 
         healthCheckApplicationEngine =

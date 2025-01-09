@@ -16,9 +16,11 @@
 
 package de.akquinet.tim.proxy
 
+import InvitePermissionDto
 import io.ktor.client.HttpClient
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.*
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
@@ -42,10 +44,17 @@ class VZDPublicIDCheckImpl(
         val invitePermissionUrl = URL(
             regServiceConfig.baseUrl + ":" + regServiceConfig.servicePort + regServiceConfig.invitePermissionCheckEndpoint
         ).toString()
+
         val response = httpClient.post(invitePermissionUrl) {
             contentType(ContentType.Application.Json)
-            setBody(Json.encodeToString(Pair(inviter, invited)))
+            setBody(Json.encodeToString(InvitePermissionDto(inviter, invited)))
         }
+
+        if (response.status != HttpStatusCode.OK) {
+        log.info("areMXIDsPublic failed with status code ${response.status} and response: ${response.bodyAsText()}")
+
+        }
+
         return response.status == HttpStatusCode.OK
     }
 }
