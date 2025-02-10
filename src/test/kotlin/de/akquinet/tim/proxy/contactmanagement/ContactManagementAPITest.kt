@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2024 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,19 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package de.akquinet.tim.proxy.contactmanagement
 
+import de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement.Contact
+import de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement.ContactInviteSettings
 import de.akquinet.tim.proxy.contactmgmt.ContactRoutesImpl
 import de.akquinet.tim.proxy.contactmgmt.authorization.MatrixAuthorizationService
 import de.akquinet.tim.proxy.contactmgmt.contactApiServer
-import de.akquinet.tim.proxy.contactmgmt.model.Contact
-import de.akquinet.tim.proxy.contactmgmt.model.ContactDTO
-import de.akquinet.tim.proxy.contactmgmt.model.ContactManagementInfo
-import de.akquinet.tim.proxy.contactmgmt.model.InviteSettings
 import de.akquinet.tim.proxy.mocks.ContactManagementStub
 import de.akquinet.tim.proxy.mocks.RawDataServiceStub
 import io.kotest.assertions.json.shouldEqualJson
+import io.kotest.assertions.ktor.client.shouldHaveContentType
 import io.kotest.assertions.ktor.client.shouldHaveStatus
 import io.kotest.common.runBlocking
 import io.kotest.core.spec.style.ShouldSpec
@@ -36,12 +34,11 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.http.ContentType.*
 import io.ktor.http.HttpStatusCode.Companion.BadRequest
-import io.ktor.http.HttpStatusCode.Companion.Conflict
-import io.ktor.http.HttpStatusCode.Companion.Created
+import io.ktor.http.HttpStatusCode.Companion.InternalServerError
+import io.ktor.http.HttpStatusCode.Companion.NoContent
 import io.ktor.http.HttpStatusCode.Companion.NotFound
 import io.ktor.http.HttpStatusCode.Companion.OK
 import io.ktor.http.HttpStatusCode.Companion.Unauthorized
-import io.ktor.http.HttpStatusCode.Companion.UnprocessableEntity
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.testing.*
@@ -51,10 +48,12 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.util.*
 
 class ContactManagementAPITest : ShouldSpec({
     val matrixAuthorizationServiceMock: MatrixAuthorizationService = mockk()
+    val expectedMissingIdError = """{"errorCode":"400 Bad Request","errorMessage":"Missing parameter 'id'"}"""
+    val expectedNotFoundError = """{"errorCode":"404 Not Found","errorMessage":"Contact does not exist"}"""
+    val expectedIncorrectOrEmptyBody = """{"errorCode":"400 Bad Request","errorMessage":"Incorrect or empty body"}"""
 
     fun withCut(block: suspend ApplicationTestBuilder.() -> Unit) {
         testApplication {
@@ -110,14 +109,11 @@ class ContactManagementAPITest : ShouldSpec({
                     val response = client.get("/tim-contact-mgmt")
 
                     response shouldHaveStatus OK
-                    response.bodyAsText() shouldEqualJson Json.encodeToString(
-                        ContactManagementInfo(
-                            title = "Contact Management des TI-Messengers",
-                            description = "Contact Management des TI-Messengers. Betreiber: <Betreibername>",
-                            contact = "Kontaktinformationen",
-                            version = "1.0.0"
-                        )
-                    )
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson """{"title":"Contact Management des TI-Messengers",
+                        "version":"1.0.2","description":
+                        "Contact Management des TI-Messengers. Betreiber: <Betreibername>",
+                        "contact":"Contact information"}"""
                 }
             }
         }
@@ -125,7 +121,7 @@ class ContactManagementAPITest : ShouldSpec({
         /**
          * Tests for GET "/tim-contact-mgmt/contacts"
          * */
-        should("should throw unauthorized when autorization fails") {
+        should("should throw unauthorized when authorization fails") {
             givenUnauthenticatedUser {
                 withCut {
                     val response = client.get("/tim-contact-mgmt/contacts") {
@@ -134,7 +130,7 @@ class ContactManagementAPITest : ShouldSpec({
                     }
 
                     response shouldHaveStatus Unauthorized
-                    response.bodyAsText() shouldBe "M_UNAUTHORIZED"
+                    response.bodyAsText() shouldBe "UNAUTHORIZED"
                 }
             }
 
@@ -149,7 +145,8 @@ class ContactManagementAPITest : ShouldSpec({
                     }
 
                     response shouldHaveStatus OK
-                    response.bodyAsText() shouldEqualJson Json.encodeToString(emptyList<Contact>())
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson """{"contacts":[]}"""
                 }
             }
         }
@@ -161,19 +158,11 @@ class ContactManagementAPITest : ShouldSpec({
                         headers.append("mxid", "12345")
                         headers.append("authorization", "Bearer SuperToken")
                     }
-                    val list =
-                        listOf(
-                            Contact(
-                                id = UUID.fromString("8f0874ee-8db6-4056-baf8-eeaa1c23aed0"),
-                                ownerId = "owner4",
-                                approvedId = "12345",
-                                displayName = "Alice",
-                                inviteStart = 17
-                            ).toContactDTO()
-                        )
 
                     response shouldHaveStatus OK
-                    response.bodyAsText() shouldEqualJson Json.encodeToString(list)
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson """{"contacts":[{"displayName":"Alice","mxid":"12345",
+                        "inviteSettings":{"start":17,"end":null}}]}"""
                 }
             }
         }
@@ -181,24 +170,24 @@ class ContactManagementAPITest : ShouldSpec({
         /**
          * Tests for GET "/tim-contact-mgmt/contacts/{mxid}"
          * */
-        should("get someone else's mxid should throw unauthorized with authenticated user") {
+        should("get contact settings without authorization headers should throw unauthorized") {
             givenAuthenticatedUser {
                 withCut {
                     val response = client.get("/tim-contact-mgmt/contacts/5555")
 
                     response shouldHaveStatus Unauthorized
-                    response.bodyAsText() shouldBe "M_UNAUTHORIZED"
+                    response.bodyAsText() shouldBe "UNAUTHORIZED"
                 }
             }
         }
 
-        should("get someone else's mxid should throw unauthorized") {
+        should("get contacts unauthenticated should throw unauthorized") {
             givenUnauthenticatedUser {
                 withCut {
                     val response = client.get("/tim-contact-mgmt/contacts/5555")
 
                     response shouldHaveStatus Unauthorized
-                    response.bodyAsText() shouldBe "M_UNAUTHORIZED"
+                    response.bodyAsText() shouldBe "UNAUTHORIZED"
                 }
             }
         }
@@ -208,12 +197,14 @@ class ContactManagementAPITest : ShouldSpec({
                 withCut {
                     val response = client.get("/tim-contact-mgmt/contacts/")
 
-                    response shouldHaveStatus NotFound
+                    response shouldHaveStatus BadRequest
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson expectedMissingIdError
                 }
             }
         }
 
-        should("get one should return unprocessable") {
+        should("get missing one should return not found") {
             givenAuthenticatedUser {
                 withCut {
                     val response = client.get("/tim-contact-mgmt/contacts/5555") {
@@ -221,13 +212,14 @@ class ContactManagementAPITest : ShouldSpec({
                         headers.append("authorization", "Bearer SuperToken")
                     }
 
-                    response shouldHaveStatus UnprocessableEntity
-                    response.bodyAsText() shouldBe "No Contact Found"
+                    response shouldHaveStatus NotFound
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson expectedNotFoundError
                 }
             }
         }
 
-        should("get one should return Alice") {
+        should("get available one should return contact") {
             givenAuthenticatedUser {
                 withCut {
                     val response = client.get("/tim-contact-mgmt/contacts/4444") {
@@ -236,15 +228,9 @@ class ContactManagementAPITest : ShouldSpec({
                     }
 
                     response shouldHaveStatus OK
-                    response.bodyAsText() shouldEqualJson Json.encodeToString(
-                        Contact(
-                            id = UUID.fromString("8f0874ee-8db6-4056-baf8-eeaa1c23aed0"),
-                            ownerId = "1234",
-                            approvedId = "4444",
-                            displayName = "Alice",
-                            inviteStart = 17
-                        ).toContactDTO()
-                    )
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson """{"displayName":"Alice","mxid":"4444","inviteSettings":
+                        {"start":17,"end":null}}"""
                 }
             }
         }
@@ -257,15 +243,13 @@ class ContactManagementAPITest : ShouldSpec({
             noAuthenticationNeeded {
                 withCut {
                     val response = client.post("/tim-contact-mgmt/contacts") {
-                        setBody(
-                            Json.encodeToString(
-                                "{}"
-                            )
-                        )
+                        setBody("\"{}\"")
                         contentType(Application.Json)
                     }
 
                     response shouldHaveStatus BadRequest
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson expectedIncorrectOrEmptyBody
                 }
             }
         }
@@ -277,10 +261,8 @@ class ContactManagementAPITest : ShouldSpec({
                         contentType(Application.Json)
                         setBody(
                             Json.encodeToString(
-                                ContactDTO(
-                                    mxid = "333",
-                                    displayName = "Bob",
-                                    inviteSettings = InviteSettings(17)
+                                Contact(
+                                    mxid = "333", displayName = "Bob", inviteSettings = ContactInviteSettings(17)
                                 )
                             )
                         )
@@ -288,7 +270,7 @@ class ContactManagementAPITest : ShouldSpec({
                     }
 
                     response shouldHaveStatus Unauthorized
-                    response.bodyAsText() shouldBe "M_UNAUTHORIZED"
+                    response.bodyAsText() shouldBe "UNAUTHORIZED"
                 }
             }
         }
@@ -296,10 +278,8 @@ class ContactManagementAPITest : ShouldSpec({
         should("post should respond created") {
             givenAuthenticatedUser {
                 withCut {
-                    val contact = ContactDTO(
-                        mxid = "4445",
-                        displayName = "Alice",
-                        inviteSettings = InviteSettings(17)
+                    val contact = Contact(
+                        mxid = "4445", displayName = "Alice", inviteSettings = ContactInviteSettings(17)
                     )
                     val response = client.post("/tim-contact-mgmt/contacts") {
                         headers.append("mxid", "1234")
@@ -308,8 +288,10 @@ class ContactManagementAPITest : ShouldSpec({
                         setBody(Json.encodeToString(contact))
                     }
 
-                    response shouldHaveStatus Created
-                    response.bodyAsText() shouldEqualJson Json.encodeToString(contact)
+                    response shouldHaveStatus OK
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson """{"displayName":"Alice","mxid":"4445","inviteSettings":
+                        {"start":17,"end":null}}"""
                 }
             }
         }
@@ -323,18 +305,18 @@ class ContactManagementAPITest : ShouldSpec({
                         contentType(Application.Json)
                         setBody(
                             Json.encodeToString(
-                                ContactDTO(
-                                    mxid = "333",
-                                    displayName = "Bob",
-                                    inviteSettings = InviteSettings(17)
+                                Contact(
+                                    mxid = "333", displayName = "Bob", inviteSettings = ContactInviteSettings(17)
                                 )
                             )
                         )
 
                     }
 
-                    response shouldHaveStatus Conflict
-                    response.bodyAsText() shouldBe "Contact could not be created"
+                    response shouldHaveStatus InternalServerError
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson """{"errorCode":"500 Internal Server Error",
+                        "errorMessage":"Contact could not be created"}"""
                 }
             }
         }
@@ -345,24 +327,33 @@ class ContactManagementAPITest : ShouldSpec({
         should("delete without id should throw bad request") {
             noAuthenticationNeeded {
                 withCut {
-                    val response = client.delete("/tim-contact-mgmt/contacts/") {
-                        contentType(Application.Json)
-                    }
+                    val response = client.delete("/tim-contact-mgmt/contacts/")
 
-                    response shouldHaveStatus NotFound
+                    response shouldHaveStatus BadRequest
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson expectedMissingIdError
                 }
             }
         }
 
-        should("delete someone else's mxidshould throw unauthorized") {
-            givenAuthenticatedUser {
+        should("delete unauthenticated should throw unauthorized") {
+            givenUnauthenticatedUser {
                 withCut {
-                    val response = client.delete("/tim-contact-mgmt/contacts/5555") {
-                        contentType(Application.Json)
-                    }
+                    val response = client.delete("/tim-contact-mgmt/contacts/5555")
 
                     response shouldHaveStatus Unauthorized
-                    response.bodyAsText() shouldBe "M_UNAUTHORIZED"
+                    response.bodyAsText() shouldBe "UNAUTHORIZED"
+                }
+            }
+        }
+
+        should("delete without authentication headers should throw unauthorized") {
+            givenAuthenticatedUser {
+                withCut {
+                    val response = client.delete("/tim-contact-mgmt/contacts/5555")
+
+                    response shouldHaveStatus Unauthorized
+                    response.bodyAsText() shouldBe "UNAUTHORIZED"
                 }
             }
         }
@@ -373,26 +364,25 @@ class ContactManagementAPITest : ShouldSpec({
                     val response = client.delete("/tim-contact-mgmt/contacts/5555") {
                         headers.append("mxid", "1234")
                         headers.append("authorization", "Bearer SuperToken")
-                        contentType(Application.Json)
                     }
 
-                    response shouldHaveStatus OK
+                    response shouldHaveStatus NoContent
                     response.bodyAsText().shouldBeEmpty()
                 }
             }
         }
 
-        should("delete should respond unprocessable when contact does not exist") {
+        should("delete should respond not found when contact does not exist") {
             givenAuthenticatedUser {
                 withCut {
                     val response = client.delete("/tim-contact-mgmt/contacts/2222") {
                         headers.append("mxid", "1234")
                         headers.append("authorization", "Bearer SuperToken")
-                        contentType(Application.Json)
                     }
 
-                    response shouldHaveStatus UnprocessableEntity
-                    response.bodyAsText() shouldBe "contact does not exist"
+                    response shouldHaveStatus NotFound
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson expectedNotFoundError
                 }
             }
         }
@@ -400,34 +390,30 @@ class ContactManagementAPITest : ShouldSpec({
         /**
          * Tests for PUT "/tim-contact-mgmt/contacts"
          * */
-        should("put should throw bad request") {
+        should("put should throw bad request with empty body") {
             noAuthenticationNeeded {
                 withCut {
                     val response = client.put("/tim-contact-mgmt/contacts") {
                         contentType(Application.Json)
-                        setBody(
-                            Json.encodeToString(
-                                "{}"
-                            )
-                        )
+                        setBody("\"{}\"")
                     }
 
                     response shouldHaveStatus BadRequest
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson expectedIncorrectOrEmptyBody
                 }
             }
         }
 
-        should("put should throw unauthorized") {
+        should("put should throw unauthorized without mxid and token headers") {
             givenAuthenticatedUser {
                 withCut {
                     val response = client.put("/tim-contact-mgmt/contacts") {
                         contentType(Application.Json)
                         setBody(
                             Json.encodeToString(
-                                ContactDTO(
-                                    mxid = "4444",
-                                    displayName = "Alice",
-                                    inviteSettings = InviteSettings(17)
+                                Contact(
+                                    mxid = "4444", displayName = "Alice", inviteSettings = ContactInviteSettings(17)
                                 )
                             )
                         )
@@ -435,7 +421,7 @@ class ContactManagementAPITest : ShouldSpec({
                     }
 
                     response shouldHaveStatus Unauthorized
-                    response.bodyAsText() shouldBe "M_UNAUTHORIZED"
+                    response.bodyAsText() shouldBe "UNAUTHORIZED"
                 }
             }
         }
@@ -443,10 +429,8 @@ class ContactManagementAPITest : ShouldSpec({
         should("put should respond updated") {
             givenAuthenticatedUser {
                 withCut {
-                    val contact = ContactDTO(
-                        mxid = "4444",
-                        displayName = "Alice",
-                        inviteSettings = InviteSettings(17)
+                    val contact = Contact(
+                        mxid = "4444", displayName = "Alice", inviteSettings = ContactInviteSettings(17)
                     )
                     val response = client.put("/tim-contact-mgmt/contacts") {
                         headers.append("mxid", "1234")
@@ -456,11 +440,14 @@ class ContactManagementAPITest : ShouldSpec({
                     }
 
                     response shouldHaveStatus OK
+                    response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+                    response.bodyAsText() shouldEqualJson """{"displayName":"Alice","mxid":"4444","inviteSettings":
+                        {"start":17,"end":null}}"""
                 }
             }
         }
 
-        should("put should throw unprocessable") {
+        should("put should throw NotFound") {
             givenAuthenticatedUser {
                 withCut {
                     val response = client.put("/tim-contact-mgmt/contacts") {
@@ -469,18 +456,16 @@ class ContactManagementAPITest : ShouldSpec({
                         contentType(Application.Json)
                         setBody(
                             Json.encodeToString(
-                                ContactDTO(
-                                    mxid = "333",
-                                    displayName = "Bob",
-                                    inviteSettings = InviteSettings(17)
+                                Contact(
+                                    mxid = "333", displayName = "Bob", inviteSettings = ContactInviteSettings(17)
                                 )
                             )
                         )
 
                     }
 
-                    response shouldHaveStatus UnprocessableEntity
-                    response.bodyAsText() shouldBe "contact does not exist"
+                    response shouldHaveStatus NotFound
+                    response.bodyAsText() shouldEqualJson expectedNotFoundError
                 }
             }
         }

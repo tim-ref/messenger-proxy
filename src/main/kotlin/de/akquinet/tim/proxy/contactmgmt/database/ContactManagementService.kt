@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2024 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,97 +13,101 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package de.akquinet.tim.proxy.contactmgmt.database
 
+import de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement.InfoObject
 import de.akquinet.tim.proxy.contactmgmt.database.DatabaseFactory.dbQuery
-import de.akquinet.tim.proxy.contactmgmt.model.Contact
-import de.akquinet.tim.proxy.contactmgmt.model.ContactManagementInfo
-import de.akquinet.tim.proxy.contactmgmt.model.Contacts
-import org.jetbrains.exposed.sql.Op
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.SqlExpressionBuilder
+import de.akquinet.tim.proxy.contactmgmt.model.ContactEntities
+import de.akquinet.tim.proxy.contactmgmt.model.ContactEntity
+import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.update
 import java.time.Instant
-import java.util.UUID
+import java.util.*
 
+// Berechtigungsstufe 3
 interface ContactManagementService {
-    fun getInfo(): ContactManagementInfo
-    suspend fun getContacts(listOwnerMxid: String): List<Contact>
-    suspend fun createContactSetting(listOwnerMxid: String, contact: Contact): Contact?
-    suspend fun updateContactSetting(listOwnerMxid: String, contact: Contact): Boolean
-    suspend fun getContact(listOwnerMxid: String, approvedMxid: String): Contact?
-    suspend fun deleteContactSetting(listOwnerMxid: String, approvedMxid: String): Boolean
-    suspend fun deleteAllExpired()
-
+    fun getInfo(): InfoObject
+    suspend fun findContactsOf(ownerMxid: String): List<ContactEntity>
+    suspend fun addContactTo(ownerMxid: String, contactEntity: ContactEntity): ContactEntity?
+    suspend fun updateContactSetting(ownerMxid: String, contactEntity: ContactEntity): Boolean
+    suspend fun getContact(ownerMxid: String, approvedMxid: String): ContactEntity?
+    suspend fun hasContactValidInviteSettings(ownerMxid: String, approvedMxid: String, timeToCompare: Instant): Boolean
+    suspend fun deleteContactSetting(ownerMxid: String, approvedMxid: String): Boolean
+    suspend fun deleteAllExpired(): Int
 }
 
-class ContactManagementServiceImpl() : ContactManagementService {
+class ContactManagementServiceImpl : ContactManagementService {
 
-    private fun resultRowToContact(row: ResultRow) = Contact(
-        id = row[Contacts.id],
-        ownerId = row[Contacts.ownerId],
-        approvedId = row[Contacts.approvedId],
-        displayName = row[Contacts.displayName],
-        inviteStart = row[Contacts.inviteStart],
-        inviteEnd = row[Contacts.inviteEnd],
+    private fun resultRowToContact(row: ResultRow) = ContactEntity(
+        id = row[ContactEntities.id],
+        ownerId = row[ContactEntities.ownerId],
+        approvedId = row[ContactEntities.approvedId],
+        displayName = row[ContactEntities.displayName],
+        inviteStart = row[ContactEntities.inviteStart],
+        inviteEnd = row[ContactEntities.inviteEnd],
     )
 
-    override fun getInfo() = ContactManagementInfo(
+    override fun getInfo() = InfoObject(
         title = "Contact Management des TI-Messengers",
         description = "Contact Management des TI-Messengers. Betreiber: <Betreibername>",
-        contact = "Kontaktinformationen",
-        version = "1.0.0"
+        contact = "Contact information",
+        version = "1.0.2"
     )
 
-    override suspend fun getContacts(listOwnerMxid: String): List<Contact> = dbQuery {
-        Contacts.selectAll()
-            .where { Contacts.ownerId eq listOwnerMxid }
-            .map(::resultRowToContact)
+    override suspend fun findContactsOf(ownerMxid: String): List<ContactEntity> = dbQuery {
+        ContactEntities.selectAll().where { ContactEntities.ownerId eq ownerMxid }.map(::resultRowToContact)
     }
 
-    override suspend fun createContactSetting(listOwnerMxid: String, contact: Contact): Contact? = dbQuery {
-        val insertStatement = Contacts.insert {
+    override suspend fun addContactTo(ownerMxid: String, contactEntity: ContactEntity): ContactEntity? = dbQuery {
+        val insertStatement = ContactEntities.insert {
             it[id] = UUID.randomUUID()
-            it[ownerId] = listOwnerMxid
-            it[approvedId] = contact.approvedId
-            it[displayName] = contact.displayName
-            it[inviteEnd] = contact.inviteEnd
-            it[inviteStart] = contact.inviteStart
+            it[ownerId] = ownerMxid
+            it[approvedId] = contactEntity.approvedId
+            it[displayName] = contactEntity.displayName
+            it[inviteEnd] = contactEntity.inviteEnd
+            it[inviteStart] = contactEntity.inviteStart
         }
         insertStatement.resultedValues?.singleOrNull()?.let(::resultRowToContact)
     }
 
-    override suspend fun updateContactSetting(listOwnerMxid: String, contact: Contact): Boolean = dbQuery {
-        Contacts.update({ Contacts.id eq contact.id }) {
-            it[ownerId] = contact.ownerId
-            it[approvedId] = contact.approvedId
-            it[displayName] = contact.displayName
-            it[inviteEnd] = contact.inviteEnd
-            it[inviteStart] = contact.inviteStart
+    override suspend fun updateContactSetting(ownerMxid: String, contactEntity: ContactEntity): Boolean = dbQuery {
+        ContactEntities.update({ ContactEntities.id eq contactEntity.id }) {
+            it[ownerId] = contactEntity.ownerId
+            it[approvedId] = contactEntity.approvedId
+            it[displayName] = contactEntity.displayName
+            it[inviteEnd] = contactEntity.inviteEnd
+            it[inviteStart] = contactEntity.inviteStart
         } > 0
     }
 
-    override suspend fun getContact(listOwnerMxid: String, approvedMxid: String): Contact? = dbQuery {
-        Contacts.selectAll()
-            .where { (Contacts.ownerId eq listOwnerMxid).and(Contacts.approvedId eq approvedMxid) }
-            .limit(1)
-            .map(::resultRowToContact).firstOrNull() }
-
-    override suspend fun deleteContactSetting(listOwnerMxid: String, approvedMxid: String): Boolean = dbQuery{
-        Contacts.deleteWhere { (approvedId eq approvedMxid).and(ownerId eq listOwnerMxid) } > 0
+    override suspend fun getContact(ownerMxid: String, approvedMxid: String): ContactEntity? = dbQuery {
+        ContactEntities.selectAll().where {
+                (ContactEntities.ownerId eq ownerMxid).and(ContactEntities.approvedId eq approvedMxid)
+            }.limit(1).map(::resultRowToContact).firstOrNull()
     }
 
-    override suspend fun deleteAllExpired() {
-        Contacts.deleteWhere { inviteEnd less Instant.now().epochSecond }
+    override suspend fun hasContactValidInviteSettings(
+        ownerMxid: String, approvedMxid: String, timeToCompare: Instant
+    ): Boolean = dbQuery {
+        ContactEntities.selectAll().where {
+                (ContactEntities.ownerId eq ownerMxid).and(ContactEntities.approvedId eq approvedMxid)
+                    .and(ContactEntities.inviteStart lessEq timeToCompare.epochSecond).and(
+                        ContactEntities.inviteEnd.isNull().or(
+                            ContactEntities.inviteEnd greater timeToCompare.epochSecond
+                        )
+                    )
+
+            }.count() > 0
     }
 
+
+    override suspend fun deleteContactSetting(ownerMxid: String, approvedMxid: String): Boolean = dbQuery {
+        ContactEntities.deleteWhere { (approvedId eq approvedMxid).and(ownerId eq ownerMxid) } > 0
+    }
+
+    override suspend fun deleteAllExpired(): Int = dbQuery {
+        ContactEntities.deleteWhere { inviteEnd less Instant.now().epochSecond }
+    }
 
 }

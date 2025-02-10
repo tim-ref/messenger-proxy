@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2024 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
  */
 package de.akquinet.tim.proxy.extensions
 
-import de.akquinet.tim.proxy.extensions.toAtFormat
-import de.akquinet.tim.proxy.extensions.toUriFormat
 import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
 import net.folivo.trixnity.core.model.UserId

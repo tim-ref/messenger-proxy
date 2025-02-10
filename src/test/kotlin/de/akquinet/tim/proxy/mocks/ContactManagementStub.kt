@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2024 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,52 +13,53 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package de.akquinet.tim.proxy.mocks
 
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
-import de.akquinet.tim.proxy.contactmgmt.model.Contact
-import de.akquinet.tim.proxy.contactmgmt.model.ContactManagementInfo
+import de.akquinet.tim.proxy.contactmgmt.model.ContactEntity
+import de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement.InfoObject
+import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementServiceImpl
+import java.time.Instant
 import java.util.*
 
 class ContactManagementStub : ContactManagementService {
-    override fun getInfo(): ContactManagementInfo {
-        return ContactManagementInfo(
-            title = "Contact Management des TI-Messengers",
-            description = "Contact Management des TI-Messengers. Betreiber: <Betreibername>",
-            contact = "Kontaktinformationen",
-            version = "1.0.0"
-        )
-    }
+    override fun getInfo(): InfoObject = ContactManagementServiceImpl().getInfo()
 
-    override suspend fun getContacts(listOwnerMxid: String): List<Contact> {
-        return if (listOwnerMxid == "1234")
+    override suspend fun findContactsOf(ownerMxid: String): List<ContactEntity> {
+        return if (ownerMxid == "1234")
             emptyList()
         else
-            listOf(Contact(id = UUID.fromString("8f0874ee-8db6-4056-baf8-eeaa1c23aed0"), ownerId = "owner4", approvedId = "12345", displayName = "Alice", inviteStart = 17))
+            listOf(ContactEntity(id = UUID.fromString("8f0874ee-8db6-4056-baf8-eeaa1c23aed0"), ownerId = "owner4", approvedId = "12345", displayName = "Alice", inviteStart = 17))
     }
 
-    override suspend fun createContactSetting(listOwnerMxid: String, contact: Contact): Contact? {
-        return if (contact.approvedId == "4445")
-            contact
+    override suspend fun addContactTo(ownerMxid: String, contactEntity: ContactEntity): ContactEntity? {
+        return if (contactEntity.approvedId == "4445")
+            contactEntity
         else null
     }
 
-    override suspend fun updateContactSetting(listOwnerMxid: String, contact: Contact): Boolean {
-        return contact.approvedId == "4444"
+    override suspend fun updateContactSetting(ownerMxid: String, contactEntity: ContactEntity): Boolean {
+        return contactEntity.approvedId == "4444"
     }
 
-    override suspend fun getContact(listOwnerMxid: String, approvedMxid: String): Contact? {
+    override suspend fun getContact(ownerMxid: String, approvedMxid: String): ContactEntity? {
         return if (approvedMxid == "4444")
-            Contact(id = UUID.fromString("8f0874ee-8db6-4056-baf8-eeaa1c23aed0"), ownerId = "1234", approvedId = "4444", displayName = "Alice", inviteStart = 17)
+            ContactEntity(id = UUID.fromString("8f0874ee-8db6-4056-baf8-eeaa1c23aed0"), ownerId = "1234", approvedId = "4444", displayName = "Alice", inviteStart = 17)
         else null
     }
 
-    override suspend fun deleteContactSetting(listOwnerMxid: String, approvedMxid: String): Boolean {
+    override suspend fun hasContactValidInviteSettings(
+        ownerMxid: String,
+        approvedMxid: String,
+        timeToCompare: Instant
+    ): Boolean {
+        return approvedMxid == "4444"
+    }
+
+    override suspend fun deleteContactSetting(ownerMxid: String, approvedMxid: String): Boolean {
         return approvedMxid == "5555"
     }
 
-    override suspend fun deleteAllExpired() {
-    }
+    override suspend fun deleteAllExpired(): Int = 0
 
 }

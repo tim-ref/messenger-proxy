@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2024 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,10 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package de.akquinet.tim.proxy.contactmgmt.model
 
 
+import de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement.Contact
+import de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement.ContactInviteSettings
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -27,7 +28,7 @@ import org.jetbrains.exposed.sql.Table
 import java.util.*
 
 @Serializable
-data class Contact(
+data class ContactEntity(
     @Serializable(with = UUIDSerializer::class)
     val id: UUID = UUID.randomUUID(),
     val ownerId: String = "unkownOwner",
@@ -36,28 +37,15 @@ data class Contact(
     val inviteStart: Long,
     val inviteEnd: Long? = null
 ) {
-    internal fun toContactDTO() = ContactDTO(displayName = displayName, mxid = approvedId, InviteSettings(inviteStart, inviteEnd))
+    internal fun toDto() = Contact(
+        displayName = displayName,
+        mxid = approvedId,
+        ContactInviteSettings(
+            start=inviteStart,
+            end=inviteEnd
+        )
+    )
 }
-
-@Serializable
-data class ContactDTO(
-    val displayName: String,
-    val mxid: String,
-    val inviteSettings: InviteSettings,
-) {
-    internal fun toContactEntity(ownerId: String, uuid: String?) = if (uuid != null) {
-        Contact(id = UUID.fromString(uuid), ownerId = ownerId, approvedId = mxid, displayName = displayName, inviteStart = inviteSettings.start, inviteEnd = inviteSettings.end)
-    } else {
-        Contact(ownerId = ownerId, approvedId = mxid, displayName = displayName, inviteStart = inviteSettings.start, inviteEnd = inviteSettings.end)
-    }
-
-}
-
-@Serializable
-data class InviteSettings(
-    val start: Long,
-    val end: Long? = null
-)
 
 object UUIDSerializer : KSerializer<UUID> {
     override val descriptor = PrimitiveSerialDescriptor("UUID", PrimitiveKind.STRING)
@@ -71,7 +59,7 @@ object UUIDSerializer : KSerializer<UUID> {
     }
 }
 
-object Contacts : Table() {
+object ContactEntities : Table("contacts") {
     val id = uuid("id")
     val ownerId = varchar("owner_id", 256)
     val approvedId = varchar("approved_id", 256)
@@ -81,11 +69,3 @@ object Contacts : Table() {
 
     override val primaryKey = PrimaryKey(id)
 }
-
-@Serializable
-data class ContactManagementInfo(
-    val title: String,
-    val description: String? = null,
-    val contact: String? = null,
-    val version: String
-)

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2024 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package de.akquinet.tim.proxy.contactmgmt
 
 import de.akquinet.tim.proxy.ProxyConfiguration
@@ -27,11 +26,14 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import mu.KotlinLogging
 import kotlin.time.Duration.Companion.hours
 
 interface ContactManagementApi {
     suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit = {}): ApplicationEngine
 }
+
+private val logger = KotlinLogging.logger {}
 
 class ContactManagementApiImpl(
     private val contactManagementConfig: ProxyConfiguration.ContactManagementConfig,
@@ -39,35 +41,41 @@ class ContactManagementApiImpl(
     private val contactManagementService: ContactManagementService
 ) : ContactManagementApi {
     @OptIn(DelicateCoroutinesApi::class)
-    override suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit): ApplicationEngine = embeddedServer(Netty, applicationEngineEnvironment {
+    override suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit): ApplicationEngine =
+        embeddedServer(Netty, applicationEngineEnvironment {
 
-        GlobalScope.async { scheduleExpiredContactCleanup() }
+            if (GlobalScope.async {
+                    scheduleExpiredContactCleanup()
+                }.start()) {
+                logger.info { "Started cleanup job for expired invite settings." }
+            } else {
+                logger.info { "Cleanup job for expired invite settings already running." }
+            }
 
-        connector {
-            port = this@ContactManagementApiImpl.contactManagementConfig.port
-        }
+            connector {
+                port = this@ContactManagementApiImpl.contactManagementConfig.port
+            }
 
-        module {
-            contactApiServer {
-                install(ContentNegotiation) {
-                    json()
-                }
+            module {
+                contactApiServer {
+                    install(ContentNegotiation) {
+                        json()
+                    }
 
-                with(contactRoutes) {
-                    apiRoutes()
+                    with(contactRoutes) {
+                        apiRoutes()
+                    }
                 }
             }
-        }
 
-
-    }).start()
+        }).start()
 
     private suspend fun scheduleExpiredContactCleanup() {
         while (true) {
-            contactManagementService.deleteAllExpired()
+            val deleted = contactManagementService.deleteAllExpired()
+            logger.info { "Deleted expired invite settings: $deleted" }
+
             delay(1.hours)
         }
     }
-
-
 }

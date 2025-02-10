@@ -13,19 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.akquinet.tim.proxy.config
+package de.akquinet.tim.proxy.extensions
 
-import io.kotest.core.config.AbstractProjectConfig
-import io.kotest.core.extensions.Extension
-import io.kotest.extensions.junitxml.JunitXmlReporter
+import de.akquinet.tim.proxy.contactmgmt.model.ContactEntity
+import de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement.Contact
+import java.util.*
 
-class KotestProjectConfig : AbstractProjectConfig() {
-
-    override fun extensions(): List<Extension> = listOf(
-        JunitXmlReporter(
-            includeContainers = false,
-            useTestPathAsName = true,
-            outputDir = "../target/kotest-reports"
-        )
-    )
-}
+fun Contact.toEntity(
+    ownerId: String,
+    uuid: String?
+) = ContactEntity(
+    id = uuid?.let { UUID.fromString(it) } ?: UUID.randomUUID(),
+    ownerId = ownerId,
+    approvedId = mxid,
+    displayName = displayName,
+    inviteStart = inviteSettings.start,
+    inviteEnd = inviteSettings.end
+)

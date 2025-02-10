@@ -1,5 +1,5 @@
 #
-# Copyright © 2023 - 2024 akquinet GmbH (https://www.akquinet.de)
+# Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ ENV APP_HOME=/messenger-proxy
 LABEL maintainer="TIMREF Maintainers"
 
 RUN apt-get update && \
-    apt-get install -y wget nginx openjdk-17-jdk libtap-formatter-junit-perl libtap-formatter-html-perl openssl && \
+    apt-get install -y wget nginx openjdk-21-jdk libtap-formatter-junit-perl libtap-formatter-html-perl openssl && \
     apt-get clean
 
 WORKDIR $APP_HOME
