@@ -23,28 +23,28 @@ import net.folivo.trixnity.core.MatrixServerException
 fun Route.installPushrulesRoutesForBadRequest() {
     route("/_matrix/client/v3/pushrules") {
         get("/{scope}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam())
+            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
         }
         get("/{scope}/{kind}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam())
+            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
         }
         get("/{scope}/{kind}/{ruleId}/{attribute}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam())
+            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam(""))
         }
         put("/") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam())
+            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
         }
         put("/{scope}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam())
+            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
         }
         put("/{scope}/{kind}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam())
+            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
         }
         put("/{scope}/{kind}/") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam())
+            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam(""))
         }
         put("/{scope}/{kind}/{ruleId}/{attribute}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam())
+            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam(""))
         }
     }
 }

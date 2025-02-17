@@ -15,6 +15,8 @@
  */
 package de.akquinet.tim.proxy.client
 
+import de.akquinet.tim.proxy.client.model.route.DownloadMediaV1
+import com.vdurmont.emoji.EmojiParser
 import de.akquinet.tim.proxy.*
 import de.akquinet.tim.proxy.ProxyConfiguration.TimAuthorizationCheckConfiguration
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
@@ -59,6 +61,7 @@ import net.folivo.trixnity.core.ErrorResponse
 import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.core.MatrixServerException
 import net.folivo.trixnity.core.model.UserId
+import net.folivo.trixnity.core.model.events.m.ReactionEventContent
 
 interface InboundClientRoutes {
     fun Route.clientServerApiRoutes()
@@ -71,8 +74,14 @@ class InboundClientRoutesImpl(
     val timAuthorizationCheckConfiguration: TimAuthorizationCheckConfiguration,
     private val httpClient: HttpClient,
     private val rawDataService: RawDataService,
-    private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService
+    private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService,
 ) : InboundClientRoutes {
+
+    companion object {
+        const val ROOM_VERSION = "room_version"
+        const val NEW_VERSION = "new_version"
+        val supportedRoomVersions = setOf("9", "10")
+    }
 
     private fun ApplicationRequest.getDestinationUrl(): Url = uri.mergeToUrl(config.homeserverUrl)
 
@@ -88,13 +97,18 @@ class InboundClientRoutesImpl(
         }
 
         forwardEndpointWithoutCallRecieval<DownloadMedia>()
+        forwardEndpointWithoutCallRecieval<DownloadMediaLegacy>()
         forwardEndpoint<DownloadThumbnail>()
+        forwardEndpoint<DownloadThumbnailLegacy>()
     }
 
     override fun Route.clientServerApiRoutes() {
         // Berechtigungsstufe 1
         createRoom()
         inviteUser()
+
+        // matrix 1.11
+        upgradeRoom()
 
         // authentication
         authenticationRoutes()
@@ -127,15 +141,43 @@ class InboundClientRoutesImpl(
         usersRoutes()
     }
 
+    private fun Route.upgradeRoom() {
+        matrixEndpointResource<UpgradeRoom> {
+            val requestBody = call.receiveText()
+
+            val request = Json.decodeFromString<JsonObject>(requestBody)
+
+
+            validateRoomVersion(request = request, requestParameter = NEW_VERSION)
+
+            forwardRequest(
+                call, httpClient, call.request.getDestinationUrl(), requestBody.toByteArray()
+            ).let {
+                rawDataService.serverRawDataForward(
+                    request = it.first,
+                    response = it.second,
+                    duration = it.third,
+                    timOperation = Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION,
+                    sizeOut = it.fourth
+                )
+            }
+        }
+    }
+
     private fun Route.createRoom() {
         matrixEndpointResource<CreateRoom> {
             val inviter = call.principal<UserIdPrincipal>()
                 ?: throw MatrixServerException(
                     statusCode = HttpStatusCode.Unauthorized,
-                    errorResponse = ErrorResponse.Unauthorized()
+                    errorResponse = ErrorResponse.Unauthorized("")
                 )
             val requestBody = call.receiveText()
+
             val request = Json.decodeFromString<JsonObject>(requestBody)
+
+
+            validateRoomVersion(request = request, requestParameter = ROOM_VERSION)
+
             val (userId, rawdataOperation) = extractInvitedDetails(request)
 
             val relevantDomains = userId?.let {
@@ -161,6 +203,36 @@ class InboundClientRoutesImpl(
             }
         }
     }
+
+    /*
+        gemSpec_TI-M_Basis_1.1.0 A_26202, A_26203
+        https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/latest/#A_26202
+        https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/latest/#A_26203
+     */
+    private fun validateRoomVersion(request: JsonObject, requestParameter: String) {
+        val roomVersion = request[requestParameter]?.jsonPrimitive?.content
+        val isString = request["room_version"]?.jsonPrimitive?.isString
+
+        roomVersion?.takeIf { it != "null" }?.let {
+            if (isString == false) {
+                throw MatrixServerException(
+                    statusCode = HttpStatusCode.BadRequest,
+                    errorResponse = ErrorResponse.BadJson(
+                        "Ungültige Raumversion: Der Wert muss ein String sein."
+                    )
+                )
+            }
+            if (it !in supportedRoomVersions) {
+                throw MatrixServerException(
+                    statusCode = HttpStatusCode.BadRequest,
+                    errorResponse = ErrorResponse.UnsupportedRoomVersion(
+                        "Ungültige Raumversion: $roomVersion ist keine gültige Raumversion. Es werden nur die Versionen ${supportedRoomVersions.joinToString()} unterstützt."
+                    )
+                )
+            }
+        }
+    }
+
 
     private fun extractInvitedDetails(request: JsonObject): Pair<UserId?, Operation> {
         val invited = request["invite"]?.jsonArray?.map {
@@ -192,7 +264,7 @@ class InboundClientRoutesImpl(
             val inviter = call.principal<UserIdPrincipal>()
                 ?: throw MatrixServerException(
                     statusCode = HttpStatusCode.Unauthorized,
-                    errorResponse = ErrorResponse.Unauthorized()
+                    errorResponse = ErrorResponse.Unauthorized("")
                 )
 
             val requestBody = call.receiveText()
@@ -237,11 +309,9 @@ class InboundClientRoutesImpl(
         forwardEndpoint<GetMsisdnRequestTokenForPassword>()
         forwardEndpoint<GetMsisdnRequestTokenForRegistration>()
         forwardEndpoint<GetEmailRequestTokenFor3Pid>()
-        forwardEndpoint<Register>()
+        register()
         forwardWithRawData<Login>(Operation.MP_CLIENT_LOGIN_REQUEST_ACCESS_TOKEN)
         forwardWithRawData<GetLoginTypes>(Operation.MP_CLIENT_LOGIN_SUPPORTED_LOGIN_TYPES)
-        forwardEndpoint<SSORedirectTo>()
-        forwardEndpoint<SSORedirect>()
         forwardEndpoint<CasRedirect>()
         forwardEndpoint<SsoCallback>()
         forwardWithRawData<GetOIDCRequestToken>(Operation.MP_CLIENT_LOGIN_REQUEST_OPENID_TOKEN)
@@ -298,6 +368,7 @@ class InboundClientRoutesImpl(
         forwardEndpoint<GetMediaConfig>()
         forwardEndpointWithoutCallRecieval<UploadMedia>()
         forwardEndpoint<GetUrlPreview>()
+        forwardEndpoint<GetUrlPreviewLegacy>()
     }
 
     private fun Route.pushRoutes() {
@@ -327,8 +398,7 @@ class InboundClientRoutesImpl(
         forwardWithRawData<GetRelationsByRelationType>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<GetRelationsByRelationTypeAndEventType>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<SendStateEvent>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
-
-        forwardWithRawData<SendMessageEvent>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
+        sendMessageEvent()
         forwardWithRawData<RedactEvent>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<SetRoomAlias>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
         forwardWithRawData<GetRoomAlias>(Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION)
@@ -403,6 +473,81 @@ class InboundClientRoutesImpl(
 
         // cas
         forwardEndpoint<CasTicket>()
+    }
+
+    private fun assertEmojiLength(key: String?, relType: String?) {
+        if (key.isNullOrBlank()) return
+
+        val emojiHasSize1 = EmojiParser.extractEmojis(key).size == 1
+        val isEmptyWithEmojisRemoved = EmojiParser.removeAllEmojis(key).isEmpty()
+        val isAnnotation = relType == "m.annotation"
+
+        if (emojiHasSize1 && isEmptyWithEmojisRemoved && isAnnotation) return
+
+        throw MatrixServerException(
+            HttpStatusCode.BadRequest,
+            ErrorResponse.TooLarge("Key is longer than 1 character")
+        )
+    }
+
+    private fun assertNotThreading(relType: String?) {
+        if (relType == "m.thread") {
+            throw MatrixServerException(
+                HttpStatusCode.BadRequest,
+                ErrorResponse.Forbidden("threading is not allowed")
+            )
+        }
+    }
+
+    private fun Route.sendMessageEvent() {
+
+        matrixEndpointResource<SendMessageEvent> {
+            val requestBody = call.receiveText()
+            val request = Json{
+                ignoreUnknownKeys = true
+            }.decodeFromString<ReactionEventContent>(requestBody)
+            val relatesTo = request.relatesTo
+            val key = relatesTo?.key
+            val relType = relatesTo?.relationType?.name
+
+            assertEmojiLength(key, relType)
+            assertNotThreading(relType)
+
+            forwardRequest(
+                call,
+                httpClient,
+                call.request.uri.mergeToUrl(config.homeserverUrl),
+                requestBody.toByteArray()
+            ).let {
+                rawDataService.clientRawDataForward(
+                    it.first.headers,
+                    it.second.status.value,
+                    it.third,
+                    Operation.MP_EXCHANGE_EVENT_WITHIN_ORGANISATION,
+                    it.fourth
+                )
+            }
+        }
+
+    }
+
+    private fun Route.register() {
+        matrixEndpointResource<Register> {
+            val kind = call.parameters["kind"]
+            if (kind == "guest") {
+                throw MatrixServerException(
+                    HttpStatusCode.Forbidden,
+                    ErrorResponse.Forbidden("Guest access is disabled")
+                )
+            } else {
+                forwardRequest(
+                    call = call,
+                    httpClient = httpClient,
+                    destinationUrl = call.request.getDestinationUrl(),
+                    bodyJson = null
+                )
+            }
+        }
     }
 
     private fun Route.setPresence() {

@@ -88,6 +88,15 @@ class InboundProxyImpl(
                         inboundFederationRoutes.apply { serverServerRawDataRoutes() }
                     }
 
+                    route("/_matrix/client/v1/login/get_token") {
+                        handle {
+                            throw MatrixServerException(
+                                HttpStatusCode.NotFound,
+                                ErrorResponse.NotFound("No resource was found for this request.")
+                            )
+                        }
+                    }
+
                     route("/_synapse/admin/{...}") {
                         handle {
                             forwardRequest(

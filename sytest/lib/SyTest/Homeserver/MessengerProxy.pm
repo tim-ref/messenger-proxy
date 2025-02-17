@@ -1,5 +1,5 @@
 #
-# Modified by akquinet GmbH on 14.08.2024
+# Modified by akquinet GmbH on 13.01.2025
 #
 # Originally from https://github.com/matrix-org/sytest
 #
@@ -41,6 +41,15 @@ use List::Util qw(any);
 use POSIX qw(strftime WIFEXITED WEXITSTATUS);
 
 use JSON;
+
+use SyTest::Federation::Client
+
+*SyTest::Federation::Client::SUPPORTED_ROOM_VERSIONS = sub {
+    return [
+        "9",
+        "10",
+    ];
+};
 
 use SyTest::SSL qw(ensure_ssl_key create_ssl_cert);
 
@@ -147,7 +156,7 @@ sub start {
         require_auth_for_profile_requests                   => JSON::false,
         limit_profile_requests_to_users_who_share_rooms     => JSON::false,
         include_profile_data_on_invite                      => JSON::true,
-        default_room_version                                => "9",
+        default_room_version                                => "10",
         gc_min_interval                                     => ["1s", "10s", "30s"],
         filter_timeline_limit                               => 100,
         block_non_admin_invites                             => JSON::false,

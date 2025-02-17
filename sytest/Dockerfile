@@ -16,13 +16,15 @@
 
 # this image is regularly updated without setting a new container tag
 # thus the used image you are using locally can be outdated
-FROM matrixdotorg/sytest-synapse:focal
+FROM matrixdotorg/sytest-synapse:bullseye
+
+ARG TARGETARCH
 
 ENV SYTEST_PLUGINS=/plugins
 ENV SYTEST_LIB=/sytest/lib
 # SYNAPSE_VERSION and SYTEST_BRANCH should match
-ENV SYNAPSE_VERSION=v1.99.0
-ENV SYTEST_BRANCH=release-v1.99
+ENV SYNAPSE_VERSION=v1.119.0
+ENV SYTEST_BRANCH=release-v1.119
 # IN_PIPELINE to true when run in pipeline
 ENV IN_PIPELINE=false
 ENV APP_HOME=/messenger-proxy
@@ -30,8 +32,18 @@ ENV APP_HOME=/messenger-proxy
 LABEL maintainer="TIMREF Maintainers"
 
 RUN apt-get update && \
-    apt-get install -y wget nginx openjdk-21-jdk libtap-formatter-junit-perl libtap-formatter-html-perl openssl && \
+    apt-get install -y wget nginx libtap-formatter-junit-perl libtap-formatter-html-perl openssl && \
     apt-get clean
+
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+	wget https://download.oracle.com/java/21/latest/jdk-21_linux-aarch64_bin.tar.gz && \
+	mkdir -p /opt/java && \
+	tar -xzf jdk-21_linux-aarch64_bin.tar.gz -C /opt/java; \
+else \
+	wget https://download.oracle.com/java/21/latest/jdk-21_linux-x64_bin.tar.gz && \
+	mkdir -p /opt/java && \
+	tar -xzf jdk-21_linux-x64_bin.tar.gz -C /opt/java; \
+fi
 
 WORKDIR $APP_HOME
 
@@ -50,4 +62,4 @@ COPY $JAR_FILE "$APP_HOME/mp-backend-jar-with-dependencies.jar"
 # allow failing
 RUN /bin/bash /bootstrap.sh messenger_proxy || :
 
-RUN "$SYTEST_PLUGINS/messenger-proxy/scripts/messenger_proxy_sytest.sh"
+RUN env PATH="/opt/java/jdk-21.0.6/bin:$PATH" "$SYTEST_PLUGINS/messenger-proxy/scripts/messenger_proxy_sytest.sh"

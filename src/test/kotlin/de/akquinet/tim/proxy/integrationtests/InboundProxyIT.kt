@@ -20,11 +20,14 @@ import de.akquinet.tim.proxy.InboundProxyImpl
 import de.akquinet.tim.proxy.InviteRejectionPolicy
 import de.akquinet.tim.proxy.ProxyConfiguration
 import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
+import de.akquinet.tim.proxy.*
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
 import de.akquinet.tim.proxy.federation.InboundFederationRoutesImpl
+import de.akquinet.tim.proxy.mocks.*
+import io.kotest.assertions.json.shouldEqualJson
 import de.akquinet.tim.proxy.mocks.ContactManagementStub
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.RawDataServiceStub
@@ -40,6 +43,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.engine.*
+import io.ktor.server.testing.*
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -48,6 +52,12 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.time.Duration.Companion.hours
+import io.kotest.assertions.assertSoftly
+import io.ktor.http.ContentType.Application.Json
+import io.ktor.http.HttpStatusCode.Companion.OK
+import io.ktor.server.application.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 
 const val proxy = "http://localhost:8090"
 const val homeserver = "http://localhost:8083"
@@ -68,6 +78,9 @@ class InboundProxyIT {
     private val wellKnownEndpoint = "$proxy/.well-known/matrix/server"
     private val unknownEndpoint = "$proxy/_matrix/client/v3/asdf"
     private val pushRuleWithoutTemplateEndpoint = "$proxy/_matrix/client/v3/pushrules/global/not_a_template/foo"
+    private val getTokenEndpoint = "$proxy/_matrix/client/v1/login/get_token"
+    private val registerAsGuestEndpoint = "$proxy/_matrix/client/v3/register?kind=guest"
+    private val eventEndpoint = "/_matrix/client/v3/rooms/room1%3Asynapse/send/m.room.encrypted/abc"
     private val httpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) {
             json()
@@ -176,4 +189,153 @@ class InboundProxyIT {
         )
     }
 
+    @Test
+    fun shouldReturnBadRequestForRequestToGetToken() = runTest {
+        val response = httpClient.post(getTokenEndpoint)
+
+        response.status shouldBe HttpStatusCode.NotFound
+
+        response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+                    errcode = "M_NOT_FOUND",
+            error = "No resource was found for this request."
+        )
+    }
+
+    @Test
+    fun shouldReturnForbiddenForGuestRegister() = runTest {
+        val response = httpClient.post(registerAsGuestEndpoint) {
+            headers {
+                append(HttpHeaders.ContentType, "application/json")
+            }
+            setBody("{}")
+        }
+
+        response.status shouldBe HttpStatusCode.Forbidden
+
+        response.bodyAsText() shouldEqualJson
+            """{
+                    "errcode": "M_FORBIDDEN",
+                    "error":"Guest access is disabled"
+                    }"""
+    }
+
+    @Test
+    fun shouldReturnTooLongErrorMessageForThreeEmojis() = runTest {
+        val requestBody = """
+            {
+            "m.relates_to":{
+            "event_id":"event123",
+            "rel_type":"m.annotation",
+            "key":"👨‍👩‍👧👨‍👩‍"}}
+        """.trimIndent()
+
+        testApplication {
+            proxyWithClientServerRoutes(defaultConfig(httpClient = client))
+            homeserverWithRouting {
+                put(eventEndpoint) {
+                    call.respondText(
+                        contentType = Json,
+                        status = OK,
+                        text = "blubb"
+                    )
+                }
+            }
+
+            val response = client.put(eventEndpoint) {
+                headers {
+                    append(HttpHeaders.ContentType, "application/json")
+                    append("authorization", "Bearer Super key")
+                }
+                setBody(requestBody)
+            }
+
+            response.status shouldBe HttpStatusCode.BadRequest
+            response.bodyAsText() shouldEqualJson
+                """{
+                    "errcode": "M_TOO_LARGE",
+                    "error":"Key is longer than 1 character"
+                }"""
+        }
+    }
+
+    @Test
+    fun shouldReturnSuccessMessageForOneEmoji() {
+        val eventResponse = """
+            {
+              "event_id": "event345"
+            }
+        """
+        val requestBody = """
+            {
+            "m.relates_to":{
+            "event_id":"event123",
+            "rel_type":"m.annotation",
+            "key":"👨‍👩‍👧"}}
+        """.trimIndent()
+
+        testApplication {
+            proxyWithClientServerRoutes(defaultConfig(httpClient = client))
+            homeserverWithRouting {
+                put(eventEndpoint) {
+                    call.respondText(
+                        contentType = Json,
+                        status = OK,
+                        text = eventResponse
+                    )
+                }
+            }
+
+            val response =
+                client.put(eventEndpoint) {
+                    contentType(Json)
+                    accept(Json)
+                    setBody(requestBody)
+                }
+
+            assertSoftly(response) {
+                status shouldBe OK
+                bodyAsText() shouldEqualJson eventResponse
+            }
+        }
+    }
+
+    @Test
+    fun shouldReturnForbiddenErrorMessageForThreading() = runTest {
+        val requestBody = """
+            {
+              "m.relates_to": {
+                "event_id": "event123",
+                "rel_type": "m.thread"
+              }
+            }
+        """.trimIndent()
+
+        testApplication {
+            proxyWithClientServerRoutes(defaultConfig(httpClient = client))
+            homeserverWithRouting {
+                put(eventEndpoint) {
+                    call.respondText(
+                        contentType = Json,
+                        status = OK,
+                        text = "blubb"
+                    )
+                }
+            }
+
+            val response = client.put(eventEndpoint) {
+                headers {
+                    append(HttpHeaders.ContentType, "application/json")
+                    append("authorization", "Bearer Super key")
+                }
+                setBody(requestBody)
+            }
+
+            response.status shouldBe HttpStatusCode.BadRequest
+            response.bodyAsText() shouldEqualJson """
+            {
+              "errcode": "M_FORBIDDEN",
+              "error": "threading is not allowed"
+            }"""
+        }
+    }
 }

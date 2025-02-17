@@ -104,7 +104,7 @@ class OutboundProxyImpl(
                                 kLog.warn("outbound request on unhandled path {} with method {} from host {}, body {} and headers {}",
                                     call.request.uri, call.request.httpMethod, host, requestBody, headerList)
 
-                                throw MatrixServerException(HttpStatusCode.NotFound, ErrorResponse.NotFound())
+                                throw MatrixServerException(HttpStatusCode.NotFound, ErrorResponse.NotFound(""))
                             }
 
                         }

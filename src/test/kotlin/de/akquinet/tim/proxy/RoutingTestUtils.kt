@@ -18,6 +18,8 @@ package de.akquinet.tim.proxy
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.InboundClientRoutes
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
+import de.akquinet.tim.proxy.federation.InboundFederationRoutes
+import de.akquinet.tim.proxy.federation.OutboundFederationRoutes
 import de.akquinet.tim.proxy.integrationtests.homeserver
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.RawDataServiceStub
@@ -40,6 +42,30 @@ fun ApplicationTestBuilder.proxyWithClientServerRoutes(inboundClientRoutes: Inbo
         installCustomMatrixApiServer(Json)
         routing {
             with(inboundClientRoutes) { clientServerApiRoutes() }
+        }
+    }
+}
+
+/**
+ * Adds a module containing the proxy's Matrix server-server API routes to TestApplication.
+ */
+fun ApplicationTestBuilder.inboundProxyWithServerServerRoutes(inboundFederationRoutes: InboundFederationRoutes) {
+    application {
+        installCustomMatrixApiServer(Json)
+        routing {
+            with(inboundFederationRoutes) { serverServerApiRoutes() }
+        }
+    }
+}
+
+/**
+ * Adds a module containing the proxy's Matrix server-server API routes to TestApplication.
+ */
+fun ApplicationTestBuilder.outboundProxyWithServerServerRoutes(outboundFederationRoutes: OutboundFederationRoutes) {
+    application {
+        installCustomMatrixApiServer(Json)
+        routing {
+            with(outboundFederationRoutes) { serverServerApiRoutes() }
         }
     }
 }

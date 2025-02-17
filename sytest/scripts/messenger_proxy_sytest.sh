@@ -1,7 +1,7 @@
 #!/bin/bash -xe
 
 #
-# Modified by akquinet GmbH on 18.04.2023
+# Modified by akquinet GmbH on 13.01.2025
 #
 # Originally from https://github.com/matrix-org/sytest
 #
@@ -171,6 +171,16 @@ else
   OUTPUT=term
 fi
 pushd /sytest
+
+# following tests will be override for handle restricted room version
+cp /plugins/messenger-proxy/lib/SyTest/OverrideTests/30room-create.pl /sytest/tests/10apidoc/30room-create.pl
+cp /plugins/messenger-proxy/lib/SyTest/OverrideTests/60version_upgrade.pl /sytest/tests/30rooms/60version_upgrade.pl
+cp /plugins/messenger-proxy/lib/SyTest/OverrideTests/30room-join.pl /sytest/tests/50federation/30room-join.pl
+cp /plugins/messenger-proxy/lib/SyTest/OverrideTests/33room-get-missing-events.pl /sytest/tests/50federation/33room-get-missing-events.pl
+cp /plugins/messenger-proxy/lib/SyTest/OverrideTests/35room-invite.pl /sytest/tests/50federation/35room-invite.pl
+cp /plugins/messenger-proxy/lib/SyTest/OverrideTests/36state.pl /sytest/tests/50federation/36state.pl
+cp /plugins/messenger-proxy/lib/SyTest/OverrideTests/36state.pl /sytest/tests/50federation/39redactions.pl
+cp /plugins/messenger-proxy/lib/SyTest/OverrideTests/36state.pl /sytest/tests/50federation/51transactions.pl
 
 RUN_TESTS=(
     perl -I "$SYTEST_LIB" /sytest/run-tests.pl --server-implementation=MessengerProxy --python="$PYTHON_PATH" --messenger-proxy-directory="$MESSENGER_PROXY_DIR"

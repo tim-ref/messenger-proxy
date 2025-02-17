@@ -175,15 +175,15 @@ The generated license report can then be found at `$PROJECT_DIR/target/site/thir
 
 ## Architecture Overview
 
-### Fixing Matrix v1.3
-The specification of the TIM reference implementation stipulates that no higher version of the matrix protocol than v1.3 may be used. 
+### Fixing Matrix v1.11
+The specification of the TIM reference implementation stipulates that no higher version of the matrix protocol than v1.11 may be used. 
 As the Matrix version cannot be configured in Synapse, the following steps were taken in the `Messenger Proxy to determine this:
 
-1. The `Messenger Proxy` only forwards requests that are specified in then specification of Matrix v1.3. 
+1. The `Messenger Proxy` only forwards requests that are specified in then specification of Matrix v1.11.
 The checks are carried out using the path in the calling URL.
 
 2. For the request to `/_matrix/client/versions`, 
-the `Messenger Proxy` processes the Synapse response so that only version tags <= v1.3 are returned.
+the `Messenger Proxy` processes the Synapse response so that only version tags <= v1.11 are returned.
 
 ### ways of communication
 1. Connection to registration service

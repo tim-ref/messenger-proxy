@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-FROM matrixdotorg/synapse:v1.99.0 AS base
+FROM matrixdotorg/synapse:v1.119.0 AS base
 
 # Build and install modules
 FROM base

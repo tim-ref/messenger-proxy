@@ -89,20 +89,20 @@ private fun StatusPagesConfig.exception(json: Json) {
             is SerializationException ->
                 call.respond(
                     HttpStatusCode.BadRequest,
-                    json.encodeToJsonElement(ErrorResponseSerializer, ErrorResponse.BadJson(cause.message))
+                    json.encodeToJsonElement(ErrorResponseSerializer, ErrorResponse.BadJson(cause.message.orEmpty()))
                 )
 
             // catching this exception is crucial for Sytest, this is a change in comparison to trixnity
             is BadRequestException ->
                 call.respond(
                     HttpStatusCode.BadRequest,
-                    json.encodeToJsonElement(ErrorResponseSerializer, ErrorResponse.Unknown(cause.message))
+                    json.encodeToJsonElement(ErrorResponseSerializer, ErrorResponse.Unknown(cause.message.orEmpty()))
                 )
 
             else -> {
                 call.respond(
                     HttpStatusCode.InternalServerError,
-                    json.encodeToJsonElement(ErrorResponseSerializer, ErrorResponse.Unknown(cause.message))
+                    json.encodeToJsonElement(ErrorResponseSerializer, ErrorResponse.Unknown(cause.message.orEmpty()))
                 )
             }
         }

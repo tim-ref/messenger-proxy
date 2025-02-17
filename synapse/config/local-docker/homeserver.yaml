@@ -25,7 +25,7 @@ limit_profile_requests_to_users_who_share_rooms: false
 include_profile_data_on_invite: true
 allow_public_rooms_without_auth: false
 allow_public_rooms_over_federation: false
-default_room_version: "9"
+default_room_version: "10"
 gc_min_interval: [1s, 10s, 30s]
 filter_timeline_limit: 100
 block_non_admin_invites: false

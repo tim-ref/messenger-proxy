@@ -10,7 +10,7 @@
 
     <groupId>de.akquinet.timref.fachdienst.messenger-proxy</groupId>
     <artifactId>mp-backend</artifactId>
-    <version>0.5.1</version>
+    <version>0.6.0</version>
 
     <name>Messenger-Proxy</name>
     <description>Messenger-Proxy für die TIM Referenzimplementierung</description>
@@ -49,7 +49,7 @@
 
         <sonar.qualitygate.wait>true</sonar.qualitygate.wait>
 
-        <trixnity.version>4.3.1</trixnity.version>
+        <trixnity.version>4.7.3</trixnity.version>
         <ktor.version>2.3.10</ktor.version>
         <hoplite.version>2.7.5</hoplite.version>
         <koin.version>3.5.4</koin.version>
@@ -260,6 +260,11 @@
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.vdurmont</groupId>
+            <artifactId>emoji-java</artifactId>
+            <version>5.1.1</version>
         </dependency>
 
         <!-- test dependencies -->
@@ -936,7 +941,7 @@
     <scm>
         <connection>${env.CI_SCM_CONNECTION}</connection>
         <developerConnection>${env.CI_SCM_DEVELOPER_CONNECTION}</developerConnection>
-        <tag>0.5.1</tag>
+        <tag>0.6.0</tag>
         <url>${env.CI_SCM_URL}</url>
     </scm>
 </project>

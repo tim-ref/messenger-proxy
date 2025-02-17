@@ -26,6 +26,9 @@ import kotlinx.serialization.json.Json
 import net.folivo.trixnity.clientserverapi.model.server.GetVersions
 
 object GetVersionsTransformer : BodyTransformer {
+
+    private val maxMatrixVersion = MatrixVersion("v1.11")
+
     override val path: String
         get() = "/_matrix/client/versions"
 
@@ -41,10 +44,10 @@ object GetVersionsTransformer : BodyTransformer {
             else -> throw InvalidBodyException(errorMessage)
         }
         val originalVersions = Json.decodeFromString<GetVersions.Response>(bytes.decodeToString())
-        val maxVersion = MatrixVersion("v1.3")
         val filteredVersions = originalVersions.versions
             .map { MatrixVersion(it) }
-            .filter { it <= maxVersion }
+            .filter { it <= maxMatrixVersion }
+            .map { it.version }
 
         val json = Json {
             encodeDefaults = true
@@ -52,7 +55,7 @@ object GetVersionsTransformer : BodyTransformer {
 
         val newBody = json.encodeToString(
             GetVersions.Response(
-                versions = filteredVersions.sorted().map { it.version },
+                versions = filteredVersions.sorted(),
                 unstableFeatures = mapOf()
             )
         )

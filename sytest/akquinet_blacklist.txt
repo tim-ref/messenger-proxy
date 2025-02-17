@@ -161,6 +161,47 @@ Can accept third party invite with /join
 # TI-Messenger-Client das folgenden JSON-Objekt zurückgeben: ..."
 /joined_members return joined members
 
+# tests fail cause disabled SSO
+Interactive authentication types include SSO
+Can perform interactive authentication with SSO
+The user must be consistent through an interactive authentication session with SSO
+Can login with new user via CAS
+
+# test fails cause TI-M allows only new endpoints.
+# /_matrix/media/v3/config is marked as deprecated in Matrix 1.11
+# https://spec.matrix.org/v1.11/client-server-api/#get_matrixmediav3config
+Can read configuration endpoint
+
+# test fails cause TI-M allows only new endpoints
+# /matrix_/media/v3/download ist market as deprecated in Matrix 1.11
+# https://spec.matrix.org/v1.11/client-server-api/#get_matrixmediav3config
+GET /media/v3/download can fetch the value again
+
+# test fails cause TI-M allows only room version 9 and 10
+# https://github.com/matrix-org/sytest/issues/1393
+# "Your homeserver does not support the features required to interact with this room","room_version":"10"
+Inbound federation accepts attempts to join v2 rooms from servers with support
+Inbound /v1/make_join rejects remote attempts to join local users to rooms
+Inbound federation can receive v2 /send_join
+Inbound federation can receive v1 /send_join
+
+# test fails cause TI-M allows only room version 9 and 10
+# the structure of used room version is different.
+# The test expected some attributes, that doesn't exist in 9 or 10 anymore.
+Outbound federation requests missing prev_events and then asks for /state_ids and resolves the state
+Federation handles empty auth_events in state_ids sanely
+Should not be able to take over the room by pretending there is no PL event
+
+# test fails with room version 10  events respons is a string not an array
+# The backfill event returns with used room version of 1 an array. With version 10, it returns a string
+Inbound federation can backfill events
+
+# tests fail cause TI-M allows only version 9 and 10
+# These tests still fail with version 9 and 10
+# "User's homeserver does not support this room version"
+Outbound federation can send invites via v1 API
+Inbound federation can receive invite rejections
+Inbound federation rejects incorrectly-signed invite rejections
 
 #### Synapse Blacklist ####
 

@@ -29,6 +29,7 @@ import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.testing.*
+import net.folivo.trixnity.core.ErrorResponse
 import kotlin.test.Test
 
 class AccountDataIT {

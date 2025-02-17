@@ -50,6 +50,7 @@ import kotlinx.serialization.json.Json
 import net.folivo.trixnity.api.server.matrixApiServer
 import net.folivo.trixnity.clientserverapi.model.rooms.CreateRoom
 import net.folivo.trixnity.clientserverapi.model.rooms.DirectoryVisibility
+import net.folivo.trixnity.clientserverapi.model.rooms.UpgradeRoom
 import net.folivo.trixnity.clientserverapi.server.AccessTokenAuthenticationFunctionResult
 import net.folivo.trixnity.clientserverapi.server.matrixAccessTokenAuth
 import net.folivo.trixnity.core.model.RoomId
@@ -110,6 +111,7 @@ class InboundClientCheckerImplTest : ShouldSpec({
     lateinit var bsEinsService: BerechtigungsstufeEinsService
 
     val matrixTokenAuthMock: AccessTokenToUserIdAuthenticationFunction = mockk { }
+    val supportedRoomVersions = setOf("9", "10")
 
     beforeTest {
         coEvery { matrixTokenAuthMock.invoke(any()) } returns AccessTokenAuthenticationFunctionResult(
@@ -177,6 +179,10 @@ class InboundClientCheckerImplTest : ShouldSpec({
                             call.respond(Json.encodeToString(response))
                         }
                         post("/_matrix/client/v3/rooms/123:example.com/invite") {
+                            call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                            call.respond("{}")
+                        }
+                        post("/_matrix/client/v3/rooms/123:example.com/upgrade") {
                             call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                             call.respond("{}")
                         }
@@ -292,6 +298,104 @@ class InboundClientCheckerImplTest : ShouldSpec({
 
                 assertSoftly(response) {
                     status shouldBe HttpStatusCode.Forbidden
+                }
+            }
+        }
+    }
+
+    context("room version validation tests") {
+        val inviter = UserId(full = "@me:example.com")
+        val invited = UserId(full = "@you:example.com")
+        val createRoomRequest = CreateRoom.Request(
+            visibility = DirectoryVisibility.PRIVATE,
+            creationContent = CreateEventContent(creator = inviter),
+            roomVersion = null,
+            initialState = null,
+            invite = setOf(invited),
+            inviteThirdPid = null,
+            roomAliasLocalPart = null,
+            name = "my room",
+            topic = null,
+            isDirect = null,
+            powerLevelContentOverride = null,
+            preset = null
+        )
+
+        val upgradeRoomRequest = UpgradeRoom.Request(
+            newVersion = ""
+        )
+
+        supportedRoomVersions.forEach { roomVersion ->
+            should("post create room should succeed in case of $roomVersion") {
+                val validCreateRoomRequest = createRoomRequest.copy(roomVersion = roomVersion)
+                withCut {
+                    val response = client.post("/_matrix/client/v3/createRoom") {
+                        bearerAuth("some.token")
+                        header(HttpHeaders.Accept, ContentType.Application.Json.toString())
+                        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                        setBody(Json.encodeToString(validCreateRoomRequest))
+                    }
+
+                    assertSoftly(response) {
+                        status shouldBe HttpStatusCode.OK
+                        bodyAsText() shouldBe """{"room_id":"123:example.com"}"""
+                    }
+                }
+            }
+        }
+
+        should("post create room should not succeed in case of invalid room version") {
+            val invalidRoomRequest = createRoomRequest.copy(
+                roomVersion = "11"
+            )
+            withCut {
+                val response = client.post("/_matrix/client/v3/createRoom") {
+                    bearerAuth("some.token")
+                    header(HttpHeaders.Accept, ContentType.Application.Json.toString())
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    setBody(Json.encodeToString(invalidRoomRequest))
+                }
+
+                assertSoftly(response) {
+                    status shouldBe HttpStatusCode.BadRequest
+                    bodyAsText() shouldBe """{"errcode":"M_UNSUPPORTED_ROOM_VERSION","error":"Ungültige Raumversion: ${invalidRoomRequest.roomVersion} ist keine gültige Raumversion. Es werden nur die Versionen ${supportedRoomVersions.joinToString()} unterstützt."}"""
+                }
+            }
+        }
+
+        supportedRoomVersions.forEach { roomVersion ->
+            should("post upgrade room should succeed $roomVersion") {
+                val validUpgradeRoomRequest = upgradeRoomRequest.copy(newVersion = roomVersion)
+                withCut {
+                    val response = client.post("/_matrix/client/v3/rooms/123:example.com/upgrade") {
+                        bearerAuth("some.token")
+                        header(HttpHeaders.Accept, ContentType.Application.Json.toString())
+                        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                        setBody(Json.encodeToString(validUpgradeRoomRequest))
+                    }
+
+                    assertSoftly(response) {
+                        status shouldBe HttpStatusCode.OK
+                    }
+                }
+            }
+        }
+
+        should("post upgrade room should not succeed in case of invalid room version") {
+            val invalidUpgradeRoomRequest = upgradeRoomRequest.copy(
+                newVersion = "11"
+            )
+            withCut {
+                val response = client.post("/_matrix/client/v3/rooms/123:example.com/upgrade") {
+                    bearerAuth("some.token")
+                    header(HttpHeaders.Accept, ContentType.Application.Json.toString())
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    setBody(Json.encodeToString(invalidUpgradeRoomRequest))
+                }
+
+                assertSoftly(response) {
+                    status shouldBe HttpStatusCode.BadRequest
+                    bodyAsText() shouldBe  """{"errcode":"M_UNSUPPORTED_ROOM_VERSION","error":"Ungültige Raumversion: ${invalidUpgradeRoomRequest.newVersion} ist keine gültige Raumversion. Es werden nur die Versionen ${supportedRoomVersions.joinToString()} unterstützt."}"""
                 }
             }
         }

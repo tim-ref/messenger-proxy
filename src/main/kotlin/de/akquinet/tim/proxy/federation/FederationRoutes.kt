@@ -15,51 +15,25 @@
  */
 package de.akquinet.tim.proxy.federation
 
-import de.akquinet.tim.proxy.client.model.route.GetServerKeyById
-import de.akquinet.tim.proxy.federation.model.route.CasProxyValidate
-import de.akquinet.tim.proxy.federation.model.route.CheckPubkeyValidity
-import de.akquinet.tim.proxy.federation.model.route.DownloadMediaR0
-import de.akquinet.tim.proxy.federation.model.route.DownloadThumbnailR0
-import de.akquinet.tim.proxy.federation.model.route.QueryServerKeyByServerAndId
-import de.akquinet.tim.proxy.federation.model.route.SendJoinV1
-import de.akquinet.tim.proxy.federation.model.route.SendLeaveV1
+import de.akquinet.tim.proxy.client.model.route.*
+import de.akquinet.tim.proxy.federation.model.route.*
 import de.akquinet.tim.proxy.forwardRequest
 import de.akquinet.tim.proxy.forwardRequestWithoutCallReceival
-import io.ktor.client.HttpClient
-import io.ktor.http.Url
-import io.ktor.server.application.call
-import io.ktor.server.request.ApplicationRequest
-import io.ktor.server.routing.Route
+import io.ktor.client.*
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.request.*
+import io.ktor.server.routing.*
 import net.folivo.trixnity.api.server.matrixEndpointResource
-import net.folivo.trixnity.clientserverapi.model.media.DownloadMedia
-import net.folivo.trixnity.clientserverapi.model.media.DownloadThumbnail
+import net.folivo.trixnity.clientserverapi.model.media.DownloadThumbnailLegacy
+import net.folivo.trixnity.clientserverapi.model.media.GetMediaConfig
+import net.folivo.trixnity.clientserverapi.model.media.GetMediaConfigLegacy
 import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.serverserverapi.model.discovery.GetServerKeys
 import net.folivo.trixnity.serverserverapi.model.discovery.GetServerVersion
 import net.folivo.trixnity.serverserverapi.model.discovery.QueryServerKeys
 import net.folivo.trixnity.serverserverapi.model.discovery.QueryServerKeysByServer
-import net.folivo.trixnity.serverserverapi.model.federation.BackfillRoom
-import net.folivo.trixnity.serverserverapi.model.federation.ClaimKeys
-import net.folivo.trixnity.serverserverapi.model.federation.ExchangeThirdPartyInvite
-import net.folivo.trixnity.serverserverapi.model.federation.GetDevices
-import net.folivo.trixnity.serverserverapi.model.federation.GetEventAuthChain
-import net.folivo.trixnity.serverserverapi.model.federation.GetHierarchy
-import net.folivo.trixnity.serverserverapi.model.federation.GetKeys
-import net.folivo.trixnity.serverserverapi.model.federation.GetMissingEvents
-import net.folivo.trixnity.serverserverapi.model.federation.GetPublicRooms
-import net.folivo.trixnity.serverserverapi.model.federation.GetPublicRoomsWithFilter
-import net.folivo.trixnity.serverserverapi.model.federation.GetState
-import net.folivo.trixnity.serverserverapi.model.federation.GetStateIds
-import net.folivo.trixnity.serverserverapi.model.federation.MakeJoin
-import net.folivo.trixnity.serverserverapi.model.federation.MakeKnock
-import net.folivo.trixnity.serverserverapi.model.federation.MakeLeave
-import net.folivo.trixnity.serverserverapi.model.federation.OnBindThirdPid
-import net.folivo.trixnity.serverserverapi.model.federation.QueryDirectory
-import net.folivo.trixnity.serverserverapi.model.federation.QueryProfile
-import net.folivo.trixnity.serverserverapi.model.federation.SendJoin
-import net.folivo.trixnity.serverserverapi.model.federation.SendKnock
-import net.folivo.trixnity.serverserverapi.model.federation.SendLeave
-import net.folivo.trixnity.serverserverapi.model.federation.SendTransaction
+import net.folivo.trixnity.serverserverapi.model.federation.*
 
 interface FederationRoutes {
     fun Route.serverServerApiRoutes()
@@ -70,12 +44,11 @@ abstract class FederationRoutesImpl(
     private val httpClient: HttpClient
 ) : FederationRoutes {
     override fun Route.serverServerApiRoutes() {
-        forwardEndpoint<GetServerVersion>()
+        // see A_26224
         forwardEndpoint<GetServerKeys>()
-        forwardEndpoint<GetServerKeyById>()
-        forwardEndpoint<QueryServerKeys>()
         forwardEndpoint<QueryServerKeysByServer>()
-        forwardEndpoint<QueryServerKeyByServerAndId>()
+        forwardEndpoint<GetServerVersion>()
+        forwardEndpoint<QueryServerKeys>()
         forwardEndpoint<CheckPubkeyValidity>()
         forwardEndpoint<SendTransaction>()
         forwardEndpoint<GetEventAuthChain>()
@@ -105,11 +78,35 @@ abstract class FederationRoutesImpl(
         // media
         forwardEndpointWithoutCallRecieval<DownloadMedia>()
         forwardEndpointWithoutCallRecieval<DownloadMediaR0>()
+        // media V1 --> A_26262
+        forwardEndpointWithoutCallRecieval<DownloadMediaV1>()
+
         forwardEndpoint<DownloadThumbnail>()
+        forwardEndpoint<DownloadThumbnailLegacy>()
         forwardEndpoint<DownloadThumbnailR0>()
 
+        forwardEndpoint<DownloadThumbnailV1>()
+
+
+        forwardEndpoint<GetMediaConfig>()
+        forwardEndpoint<GetMediaConfigLegacy>()
         // cas
         forwardEndpoint<CasProxyValidate>()
+
+        // see A_26244 resp. TIMREF-2045
+        // Since InboundFederationRoutesImpl and OutboundFederationRoutesImpl
+        // both inherit FederationRoutesImpl, we lose the crucial information
+        // whether the class is of type InboundFederationRoutes or OutboundFederationRoutes.
+        // (Because the common supertype is FederationRoutes.)
+        // This model seems weird to me, and it should be refactored.
+
+        forwardEndpoint<GetServerKeys>()
+        forwardEndpoint<QueryServerKeysByServer>()
+
+        if (this@FederationRoutesImpl is InboundFederationRoutes) {
+            forwardEndpoint<GetServerKeyById>()
+            forwardEndpoint<QueryServerKeyByServerAndId>()
+        }
     }
 
     private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpoint() =
