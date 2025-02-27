@@ -15,6 +15,8 @@
  */
 package de.akquinet.tim.proxy.client
 
+import SSORedirect
+import SSORedirectTo
 import de.akquinet.tim.proxy.client.model.route.DownloadMediaV1
 import com.vdurmont.emoji.EmojiParser
 import de.akquinet.tim.proxy.*
@@ -312,6 +314,8 @@ class InboundClientRoutesImpl(
         register()
         forwardWithRawData<Login>(Operation.MP_CLIENT_LOGIN_REQUEST_ACCESS_TOKEN)
         forwardWithRawData<GetLoginTypes>(Operation.MP_CLIENT_LOGIN_SUPPORTED_LOGIN_TYPES)
+        forwardEndpoint<SSORedirectTo>()
+        forwardEndpoint<SSORedirect>()
         forwardEndpoint<CasRedirect>()
         forwardEndpoint<SsoCallback>()
         forwardWithRawData<GetOIDCRequestToken>(Operation.MP_CLIENT_LOGIN_REQUEST_OPENID_TOKEN)

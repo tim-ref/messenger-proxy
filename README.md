@@ -7,6 +7,10 @@ technologies:
 * `Koin Dependency Management`
 * `Trixnity Matrix Framework`
 * `PostgreSQL`
+* JDK 21
+  * [SDKMAN](https://sdkman.io) is recommended
+    * use `sdk env install` to install this version
+    * use `sdk env` to switch to this version
 
 ## How the forward proxy works
 
