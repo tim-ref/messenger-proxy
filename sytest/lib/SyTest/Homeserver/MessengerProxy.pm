@@ -1,5 +1,5 @@
 #
-# Modified by akquinet GmbH on 13.01.2025
+# Modified by akquinet GmbH on 28.02.2025
 #
 # Originally from https://github.com/matrix-org/sytest
 #
@@ -77,6 +77,7 @@ sub _init {
         messenger_proxy_health     => main::alloc_port("messenger_proxy[$idx].health"),
         messenger_proxy_prometheus => main::alloc_port("messenger_proxy[$idx].prometheus"),
         messenger_proxy_contactManagement => main::alloc_port("messenger_proxy[$idx].contactManagement"),
+        messenger_proxy_timInformation => main::alloc_port("messenger_proxy[$idx].tiMessengerInformationConfiguration"),
     };
 }
 
@@ -153,7 +154,7 @@ sub start {
         presence                                            => {
            enabled => JSON::true,
         },
-        require_auth_for_profile_requests                   => JSON::false,
+        require_auth_for_profile_requests                   => JSON::true,
         limit_profile_requests_to_users_who_share_rooms     => JSON::false,
         include_profile_data_on_invite                      => JSON::true,
         default_room_version                                => "10",
@@ -313,7 +314,7 @@ sub start {
         uploads_path                                        => "$hs_dir/uploads_path",
 
         allow_public_rooms_over_federation                  => JSON::false,
-        allow_public_rooms_without_auth                     => JSON::false,
+        allow_public_rooms_without_auth                     => JSON::true,
 
         user_agent_suffix                                   => "homeserver[" . $self->{hs_index} . "]",
 
@@ -450,7 +451,8 @@ server {
             healthPort                      => "8081",
             federationListEndpoint          => "/backend/federation",
             invitePermissionCheckEndpoint   => "/backend/vzd/invite",
-            readinessEndpoint               => "/actuator/health/readiness"
+            readinessEndpoint               => "/actuator/health/readiness",
+            wellKnownSupportEndpoint        => "/backend/well-known-support"
         },
         "federationListCache"   => {
             baseDirectory           => "$hs_dir/federationList",
@@ -467,6 +469,9 @@ server {
         },
         "contactManagement" => {
             port         => $self->{ports}{messenger_proxy_contactManagement}
+        },
+        "tiMessengerInformationConfiguration" => {
+            port         => $self->{ports}{messenger_proxy_timInformation}
         },
         "invitePermissionConfig" => {
             regApiUrl    => "http://localhost:8080/backend/vzd/invite"
@@ -544,7 +549,7 @@ server {
         return $self->_start_synapse(env => $env);
     })->then(sub {
         $output->diag(
-            "Starting messenger-proxy server $hs_index on health port " . $self->{ports}{messenger_proxy_health} . " outbound port " . $self->{ports}{messenger_proxy_outbound} . " inbound port " . $self->{ports}{messenger_proxy_inbound} . " contact management port " . $self->{ports}{messenger_proxy_contactManagement}
+            "Starting messenger-proxy server $hs_index on health port " . $self->{ports}{messenger_proxy_health} . " outbound port " . $self->{ports}{messenger_proxy_outbound} . " inbound port " . $self->{ports}{messenger_proxy_inbound} . " contact management port " . $self->{ports}{messenger_proxy_contactManagement} . " tim information port " . $self->{ports}{messenger_proxy_timInformation}
         );
 
         return $self->_start_messenger_proxy(log => $messenger_proxy_log, env => $messenger_proxy_env);
@@ -626,7 +631,7 @@ sub _start_messenger_proxy {
         connect_host => $self->{bind_host},
         connect_port => $self->{ports}{messenger_proxy_inbound},
         setup        => [ env => $env ],
-        command      => "java -Djava.security.properties==/messenger-proxy/java.security -Djdk.tls.namedGroups=brainpoolP384r1tls13,brainpoolP256r1tls13,brainpoolP384r1,brainpoolP256r1,secp384r1,secp256r1 -Dsun.security.ssl.allowLegacyHelloMessages=false -jar /messenger-proxy/mp-backend-jar-with-dependencies.jar >> " . $log,
+        command      => "java -Dcom.sun.net.ssl.checkRevocation=false -Dsun.security.ssl.allowLegacyHelloMessages=true -jar /messenger-proxy/mp-backend-jar-with-dependencies.jar >> " . $log,
         name         => "messenger-proxy-$idx"
     )
 }

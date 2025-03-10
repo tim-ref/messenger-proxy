@@ -28,6 +28,8 @@ services:
       - "8093:8093"
       # health check
       - "1233:1233"
+      # TiMessengerInformation
+      - "7777:7777"
     volumes:
       - ./certificates/key.pem:/app/certificates/key.pem
       - ./certificates/ca.crt:/app/certificates/ca.crt

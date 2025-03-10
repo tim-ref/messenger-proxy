@@ -20,13 +20,13 @@ import de.akquinet.tim.proxy.ProxyConfiguration
 import kotlinx.serialization.Serializable
 
 /**
- * [A_25258](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.0.0/#A_25258)
- * [JSON schema](https://github.com/gematik/api-ti-messenger/blob/main/src/schema/permissionConfig.json)
+ * [A_26390 - Schema der Berechtigungskonfiguration](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Pro/gemSpec_TI-M_Pro_V1.0.1/#A_26390)
+ * [JSON schema](https://github.com/gematik/api-ti-messenger/blob/tim-pro-1.0.0/src/schema/TI-M_Pro/permissionConfig_V1.json)
  */
 @Serializable
-data class PermissionConfig(
+data class ProPermissionConfig(
     val defaultSetting: DefaultSetting,
 )
 
-fun ProxyConfiguration.TimAuthorizationCheckConfiguration.asPermissionConfig() =
-    PermissionConfig(this.inviteRejectionPolicy.asDefaultSetting())
+fun ProxyConfiguration.TimAuthorizationCheckConfiguration.asProPermissionConfig() =
+    ProPermissionConfig(this.inviteRejectionPolicy.asDefaultSetting())

@@ -44,7 +44,8 @@ class FileCacheIT {
         healthPort = "8071",
         readinessEndpoint = "/actuator/health/readiness",
         federationListEndpoint = "/backend/federation",
-        invitePermissionCheckEndpoint = "/backend/vzd/invite"
+        invitePermissionCheckEndpoint = "/backend/vzd/invite",
+        wellKnownSupportEndpoint = "/backend/well-known-support"
     )
     private val baseDirectory = "federationList"
     private val filePath  = "federationList/federationList.json"

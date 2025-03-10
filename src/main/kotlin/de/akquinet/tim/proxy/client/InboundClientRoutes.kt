@@ -17,14 +17,16 @@ package de.akquinet.tim.proxy.client
 
 import SSORedirect
 import SSORedirectTo
-import de.akquinet.tim.proxy.client.model.route.DownloadMediaV1
 import com.vdurmont.emoji.EmojiParser
 import de.akquinet.tim.proxy.*
 import de.akquinet.tim.proxy.ProxyConfiguration.TimAuthorizationCheckConfiguration
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.model.route.*
+import de.akquinet.tim.proxy.client.model.route.GetDirectoryVisibility
+import de.akquinet.tim.proxy.client.model.route.GetPublicRooms
 import de.akquinet.tim.proxy.client.model.route.account_data.AccountDataType
-import de.akquinet.tim.proxy.client.model.route.account_data.PermissionConfig
+import de.akquinet.tim.proxy.client.model.route.account_data.asPermissionConfig
+import de.akquinet.tim.proxy.client.model.route.account_data.asProPermissionConfig
 import de.akquinet.tim.proxy.client.model.route.cas.CasRedirect
 import de.akquinet.tim.proxy.client.model.route.cas.CasTicket
 import de.akquinet.tim.proxy.client.model.route.pushrules.GetPushRuleWithoutId
@@ -41,13 +43,12 @@ import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.*
+import mu.KotlinLogging
 import net.folivo.trixnity.api.server.matrixEndpointResource
 import net.folivo.trixnity.clientserverapi.model.authentication.*
 import net.folivo.trixnity.clientserverapi.model.devices.*
+import net.folivo.trixnity.clientserverapi.model.discovery.GetSupport
 import net.folivo.trixnity.clientserverapi.model.discovery.GetWellKnown
 import net.folivo.trixnity.clientserverapi.model.keys.*
 import net.folivo.trixnity.clientserverapi.model.media.*
@@ -65,6 +66,8 @@ import net.folivo.trixnity.core.MatrixServerException
 import net.folivo.trixnity.core.model.UserId
 import net.folivo.trixnity.core.model.events.m.ReactionEventContent
 
+private val kLog = KotlinLogging.logger { }
+
 interface InboundClientRoutes {
     fun Route.clientServerApiRoutes()
     fun Route.openClientServerApiRoutes()
@@ -77,11 +80,14 @@ class InboundClientRoutesImpl(
     private val httpClient: HttpClient,
     private val rawDataService: RawDataService,
     private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService,
+    private val regServiceConfig: ProxyConfiguration.RegistrationServiceConfiguration
 ) : InboundClientRoutes {
 
     companion object {
         const val ROOM_VERSION = "room_version"
         const val NEW_VERSION = "new_version"
+        const val CREATE_ROOM_VERSION = "room_version"
+        const val UPGRADE_ROOM_VERSION = "new_version"
         val supportedRoomVersions = setOf("9", "10")
     }
 
@@ -98,10 +104,41 @@ class InboundClientRoutesImpl(
             )
         }
 
-        forwardEndpointWithoutCallRecieval<DownloadMedia>()
-        forwardEndpointWithoutCallRecieval<DownloadMediaLegacy>()
-        forwardEndpoint<DownloadThumbnail>()
-        forwardEndpoint<DownloadThumbnailLegacy>()
+
+        // A_26265 - TI-M FD Org-Admin Support
+        // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_26265
+        matrixEndpointResource<GetSupport> {
+            val serverName = logConfiguration.homeFQDN.split('.').first()
+
+            val url = Url(
+                "${regServiceConfig.baseUrl}:${regServiceConfig.servicePort}" +
+                        "${regServiceConfig.wellKnownSupportEndpoint}/$serverName"
+            )
+
+            kLog.info { "Forward request on ${call.request.path()} to $url"  }
+
+            forwardRequest(
+                call = call,
+                httpClient = httpClient,
+                destinationUrl = url,
+                bodyJson = call.receive()
+            )
+        }
+
+        route("/") {
+            if (config.enforceDomainList) {
+                install(PathParameterFederationCheck) {
+                    service = berechtigungsstufeEinsService
+                }
+            }
+
+            forwardEndpointWithoutCallReceival<DownloadMedia>()
+            @Suppress("DEPRECATION")
+            forwardEndpointWithoutCallReceival<DownloadMediaLegacy>()
+            @Suppress("DEPRECATION")
+            forwardEndpoint<DownloadThumbnailLegacy>()
+            forwardEndpoint<DownloadThumbnail>()
+        }
     }
 
     override fun Route.clientServerApiRoutes() {
@@ -145,12 +182,13 @@ class InboundClientRoutesImpl(
 
     private fun Route.upgradeRoom() {
         matrixEndpointResource<UpgradeRoom> {
-            val requestBody = call.receiveText()
+            val originalRequestBody = call.receiveText()
+            val originalRequest = Json.decodeFromString<JsonObject>(originalRequestBody)
 
-            val request = Json.decodeFromString<JsonObject>(requestBody)
+            val roomVersion = validateRoomVersion(request = originalRequest, requestParameter = NEW_VERSION)
 
-
-            validateRoomVersion(request = request, requestParameter = NEW_VERSION)
+            val request = JsonObject(originalRequest.plus(UPGRADE_ROOM_VERSION to JsonPrimitive(roomVersion)))
+            val requestBody = request.toString()
 
             forwardRequest(
                 call, httpClient, call.request.getDestinationUrl(), requestBody.toByteArray()
@@ -173,12 +211,13 @@ class InboundClientRoutesImpl(
                     statusCode = HttpStatusCode.Unauthorized,
                     errorResponse = ErrorResponse.Unauthorized("")
                 )
-            val requestBody = call.receiveText()
+            val originalRequestBody = call.receiveText()
+            val originalRequest = Json.decodeFromString<JsonObject>(originalRequestBody)
 
-            val request = Json.decodeFromString<JsonObject>(requestBody)
+            val roomVersion = validateRoomVersion(request = originalRequest, requestParameter = ROOM_VERSION)
 
-
-            validateRoomVersion(request = request, requestParameter = ROOM_VERSION)
+            val request = JsonObject(originalRequest.plus(CREATE_ROOM_VERSION to JsonPrimitive(roomVersion)))
+            val requestBody = request.toString()
 
             val (userId, rawdataOperation) = extractInvitedDetails(request)
 
@@ -188,7 +227,7 @@ class InboundClientRoutesImpl(
             if (config.enforceDomainList && !berechtigungsstufeEinsService.areDomainsFederated(relevantDomains)) {
                 throw MatrixServerException(
                     statusCode = HttpStatusCode.Forbidden,
-                    errorResponse = ErrorResponse.Forbidden("${userId ?: "unbekannter Benutzer"} konnte nicht eingeladen werden. Die Förderationsliste enthält nicht alle Domains: ${relevantDomains.joinToString()}.")
+                    errorResponse = ErrorResponse.Forbidden("${userId ?: "unbekannter Benutzer"} konnte nicht eingeladen werden. Die Föderationsliste enthält nicht alle Domains: ${relevantDomains.joinToString()}.")
                 )
             }
 
@@ -211,28 +250,28 @@ class InboundClientRoutesImpl(
         https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/latest/#A_26202
         https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/latest/#A_26203
      */
-    private fun validateRoomVersion(request: JsonObject, requestParameter: String) {
-        val roomVersion = request[requestParameter]?.jsonPrimitive?.content
-        val isString = request["room_version"]?.jsonPrimitive?.isString
+    private fun validateRoomVersion(request: JsonObject, requestParameter: String): String {
+        val jsonPrimitive = request[requestParameter]?.jsonPrimitive
+        val isString = jsonPrimitive?.isString != false || jsonPrimitive is JsonNull
+        val roomVersion = jsonPrimitive?.contentOrNull ?: supportedRoomVersions.last()
 
-        roomVersion?.takeIf { it != "null" }?.let {
-            if (isString == false) {
-                throw MatrixServerException(
-                    statusCode = HttpStatusCode.BadRequest,
-                    errorResponse = ErrorResponse.BadJson(
-                        "Ungültige Raumversion: Der Wert muss ein String sein."
-                    )
+        when {
+            !isString -> throw MatrixServerException(
+                statusCode = HttpStatusCode.BadRequest,
+                errorResponse = ErrorResponse.BadJson(
+                    "Ungültige Raumversion: Der Wert muss ein String sein."
                 )
-            }
-            if (it !in supportedRoomVersions) {
-                throw MatrixServerException(
-                    statusCode = HttpStatusCode.BadRequest,
-                    errorResponse = ErrorResponse.UnsupportedRoomVersion(
-                        "Ungültige Raumversion: $roomVersion ist keine gültige Raumversion. Es werden nur die Versionen ${supportedRoomVersions.joinToString()} unterstützt."
-                    )
+            )
+
+            roomVersion !in supportedRoomVersions -> throw MatrixServerException(
+                statusCode = HttpStatusCode.BadRequest,
+                errorResponse = ErrorResponse.UnsupportedRoomVersion(
+                    "Ungültige Raumversion: $roomVersion ist keine gültige Raumversion. Es werden nur die Versionen ${supportedRoomVersions.joinToString()} unterstützt."
                 )
-            }
+            )
         }
+
+        return roomVersion
     }
 
 
@@ -277,7 +316,13 @@ class InboundClientRoutesImpl(
                     "Required value InviteUser.Request.userId is null"
                 }
 
-            if (config.enforceDomainList && !berechtigungsstufeEinsService.areDomainsFederated(setOf(invited.domain, inviter.userId.domain))) {
+            if (config.enforceDomainList && !berechtigungsstufeEinsService.areDomainsFederated(
+                    setOf(
+                        invited.domain,
+                        inviter.userId.domain
+                    )
+                )
+            ) {
                 throw MatrixServerException(
                     statusCode = HttpStatusCode.Forbidden,
                     errorResponse = ErrorResponse.Forbidden("$invited konnte nicht eingeladen werden")
@@ -370,7 +415,7 @@ class InboundClientRoutesImpl(
 
     private fun Route.mediaRoutes() {
         forwardEndpoint<GetMediaConfig>()
-        forwardEndpointWithoutCallRecieval<UploadMedia>()
+        forwardEndpointWithoutCallReceival<UploadMedia>()
         forwardEndpoint<GetUrlPreview>()
         forwardEndpoint<GetUrlPreviewLegacy>()
     }
@@ -503,13 +548,15 @@ class InboundClientRoutesImpl(
         }
     }
 
+    private val json = Json {
+        ignoreUnknownKeys = true
+    }
+
     private fun Route.sendMessageEvent() {
 
         matrixEndpointResource<SendMessageEvent> {
             val requestBody = call.receiveText()
-            val request = Json{
-                ignoreUnknownKeys = true
-            }.decodeFromString<ReactionEventContent>(requestBody)
+            val request = json.decodeFromString<ReactionEventContent>(requestBody)
             val relatesTo = request.relatesTo
             val key = relatesTo?.key
             val relType = relatesTo?.relationType?.name
@@ -576,22 +623,37 @@ class InboundClientRoutesImpl(
     private fun Route.getGlobalAccountData() {
         matrixEndpointResource<GetGlobalAccountData> {
             val accountDataType = call.parameters["type"]
-            if (AccountDataType.PERMISSION_CONFIG.type == accountDataType) {
-                val defaultPermissions = PermissionConfig(timAuthorizationCheckConfiguration)
-                forwardRequestWithDefaultResponse(
-                    call = call,
-                    httpClient = httpClient,
-                    destinationUrl = call.request.getDestinationUrl(),
-                    defaultResponseText = Json.encodeToString(defaultPermissions),
-                    bodyJson = call.receiveText().toByteArray()
-                )
-            } else {
-                forwardRequest(
-                    call = call,
-                    httpClient = httpClient,
-                    destinationUrl = call.request.getDestinationUrl(),
-                    bodyJson = call.receiveText().toByteArray()
-                )
+            when (accountDataType) {
+                AccountDataType.PERMISSION_CONFIG.type -> {
+                    val defaultPermissions = timAuthorizationCheckConfiguration.asPermissionConfig()
+                    forwardRequestWithDefaultResponse(
+                        call = call,
+                        httpClient = httpClient,
+                        destinationUrl = call.request.getDestinationUrl(),
+                        defaultResponseText = Json.encodeToString(defaultPermissions),
+                        bodyJson = call.receiveText().toByteArray()
+                    )
+                }
+
+                AccountDataType.PRO_PERMISSION_CONFIG.type -> {
+                    val defaultPermissions = timAuthorizationCheckConfiguration.asProPermissionConfig()
+                    forwardRequestWithDefaultResponse(
+                        call = call,
+                        httpClient = httpClient,
+                        destinationUrl = call.request.getDestinationUrl(),
+                        defaultResponseText = Json.encodeToString(defaultPermissions),
+                        bodyJson = call.receiveText().toByteArray()
+                    )
+                }
+
+                else -> {
+                    forwardRequest(
+                        call = call,
+                        httpClient = httpClient,
+                        destinationUrl = call.request.getDestinationUrl(),
+                        bodyJson = call.receiveText().toByteArray()
+                    )
+                }
             }
         }
     }
@@ -611,7 +673,7 @@ class InboundClientRoutesImpl(
         }
     }
 
-    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpointWithoutCallRecieval() {
+    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpointWithoutCallReceival() {
         matrixEndpointResource<ENDPOINT> {
             forwardRequestWithoutCallReceival(call, httpClient, call.request.uri.mergeToUrl(config.homeserverUrl))
         }

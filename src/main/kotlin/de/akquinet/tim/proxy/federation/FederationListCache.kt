@@ -15,21 +15,24 @@
  */
 package de.akquinet.tim.proxy.federation
 
+import de.akquinet.tim.proxy.FileCacheImpl
+import de.akquinet.tim.proxy.ProxyConfiguration
 import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import de.akquinet.tim.proxy.FileCacheImpl
-import de.akquinet.tim.proxy.ProxyConfiguration
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.net.URI
@@ -37,7 +40,9 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 interface FederationListCache {
-    val domains: StateFlow<Set<String>>
+    val domains: StateFlow<Set<FederationList.FederationDomain>>
+
+    fun domainNames(): Set<String> = domains.value.map { it.domain }.toSet()
 }
 
 class FederationListCacheImpl(
@@ -58,14 +63,14 @@ class FederationListCacheImpl(
         }
     }
 
-    private val flUpdateInterval=config.updateIntervalMinutes
-    private val _domains = MutableStateFlow<Set<String>>(emptySet())
-    override val domains: StateFlow<Set<String>> = _domains.asStateFlow()
+    private val flUpdateInterval = config.updateIntervalMinutes
+    private val _domains = MutableStateFlow<Set<FederationList.FederationDomain>>(emptySet())
+    override val domains: StateFlow<Set<FederationList.FederationDomain>> = _domains.asStateFlow()
 
     override suspend fun start() = coroutineScope {
         launch {
             cacheValue
-                .mapNotNull { value -> value?.domainList?.map { it.domain }?.toSet() }
+                .mapNotNull { value -> value?.domainList?.toSet() }
                 .collect { _domains.value = it }
         }
         super.start()
@@ -82,7 +87,7 @@ class FederationListCacheImpl(
     override suspend fun requestFile(version: String?): RequestFileResult<FederationList> {
         val federationListUrl = URI(
             regServiceConfig.baseUrl + ":" + regServiceConfig.servicePort + regServiceConfig.federationListEndpoint
-            ).toURL().toString()
+        ).toURL().toString()
 
         val response = httpClient.get(federationListUrl) {}
         return when (val status = response.status) {
@@ -101,6 +106,7 @@ class FederationListCacheImpl(
     }
 }
 
+// see https://github.com/gematik/api-vzd/blob/main/src/openapi/I_VZD_TIM_Provider_Services.yaml
 @Serializable
 data class FederationList(
     @SerialName("version") val version: Int,
@@ -111,5 +117,6 @@ data class FederationList(
         @SerialName("domain") val domain: String,
         @SerialName("isInsurance") val isInsurance: Boolean,
         @SerialName("telematikID") val telematikID: String,
+        @SerialName("ik") val ik: List<String>? = null,
     )
 }

@@ -18,9 +18,9 @@ package de.akquinet.tim.proxy.federation
 import de.akquinet.tim.ErrorResponse
 import de.akquinet.tim.proxy.InviteRejectionPolicy
 import de.akquinet.tim.proxy.ProxyConfiguration
+import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunction
-import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
 import de.akquinet.tim.proxy.client.UserIdPrincipal
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
@@ -28,13 +28,22 @@ import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.rawdata.model.RawDataMetaData
 import de.akquinet.tim.shouldEqualJsonMatrixStandard
 import io.kotest.assertions.assertSoftly
+import io.kotest.assertions.json.shouldEqualJson
+import io.kotest.assertions.ktor.client.shouldHaveStatus
 import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeTypeOf
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.http.ContentType.Application
+import io.ktor.http.HttpStatusCode.Companion.BadRequest
+import io.ktor.http.HttpStatusCode.Companion.Forbidden
+import io.ktor.http.HttpStatusCode.Companion.NotFound
+import io.ktor.http.HttpStatusCode.Companion.OK
+import io.ktor.http.HttpStatusCode.Companion.Unauthorized
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -133,7 +142,13 @@ class InboundClientCheckerImplTest : ShouldSpec({
             rawDataService = spyk(RawDataServiceImpl(logInfoConfig, client))
 
             val flMock = FederationListCacheMock()
-            flMock.domains.value = setOf("example.com")
+            flMock.domains.value = setOf(
+                FederationList.FederationDomain(
+                    domain = "example.com",
+                    isInsurance = true,
+                    telematikID = "telematik"
+                )
+            )
             bsEinsService = BerechtigungsstufeEinsService(flMock)
 
             val inboundClientRoutes = InboundClientRoutesImpl(
@@ -142,7 +157,16 @@ class InboundClientCheckerImplTest : ShouldSpec({
                 timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
                 httpClient = client,
                 rawDataService = rawDataService,
-                berechtigungsstufeEinsService = bsEinsService
+                berechtigungsstufeEinsService = bsEinsService,
+                regServiceConfig = ProxyConfiguration.RegistrationServiceConfiguration(
+                    baseUrl = "https://reg-service",
+                    servicePort = "8080",
+                    healthPort = "8081",
+                    federationListEndpoint = "/backend/federation",
+                    invitePermissionCheckEndpoint = "/backend/vzd/invite",
+                    readinessEndpoint = "/actuator/health/readiness",
+                    wellKnownSupportEndpoint = "/backend/well-known-support"
+                )
             )
             application {
                 install(Authentication) {
@@ -164,27 +188,29 @@ class InboundClientCheckerImplTest : ShouldSpec({
                 hosts(synapseDestinationUrl) {
                     routing {
                         get("/.well-known/matrix/client") {
-                            call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                            call.respond("""{"m.homeserver": "homeserver.example.com:1234"}""")
+                            call.respondText("""{"m.homeserver": "homeserver.example.com:1234"}""", Application.Json)
                         }
                         post("/_matrix/client/v3/login") {
                             call.receiveText() shouldBe loginRequestString
-                            call.request.headers[HttpHeaders.ContentType] shouldBe ContentType.Application.Json.toString()
-                            call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                            call.respond(loginResponseString)
+                            call.request.contentType() shouldBe Application.Json
+
+                            call.respondText(loginResponseString, Application.Json)
                         }
                         post("/_matrix/client/v3/createRoom") {
                             val response = CreateRoom.Response(roomId = RoomId("123:example.com"))
-                            call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                            call.respond(Json.encodeToString(response))
+                            call.respondText(Json.encodeToString(response), Application.Json)
                         }
                         post("/_matrix/client/v3/rooms/123:example.com/invite") {
-                            call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                            call.respond("{}")
+                            call.respondText("{}", Application.Json)
                         }
                         post("/_matrix/client/v3/rooms/123:example.com/upgrade") {
-                            call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                            call.respond("{}")
+                            call.respondText("{}", Application.Json)
+                        }
+                        get("/_matrix/client/v3/publicRooms") {
+                            call.respondText("{}", Application.Json)
+                        }
+                        get("/_matrix/client/v3/directory/list/room/{roomId}") {
+                            call.respondText("{}", Application.Json)
                         }
                     }
                 }
@@ -192,7 +218,7 @@ class InboundClientCheckerImplTest : ShouldSpec({
                     routing {
                         post(rawDataPath) {
                             Json.decodeFromString<RawDataMetaData>(call.receiveText()).shouldBeTypeOf<RawDataMetaData>()
-                            call.request.headers[HttpHeaders.ContentType] shouldBe ContentType.Application.Json.toString()
+                            call.request.contentType() shouldBe Application.Json
                         }
                     }
                 }
@@ -204,9 +230,10 @@ class InboundClientCheckerImplTest : ShouldSpec({
         should("get well known") {
             withCut {
                 val response = client.get("/.well-known/matrix/client")
-                assertSoftly(response) {
-                    status shouldBe HttpStatusCode.OK
-                    bodyAsText() shouldBe """{"m.homeserver": "homeserver.example.com:1234"}"""
+
+                assertSoftly {
+                    response shouldHaveStatus OK
+                    response.bodyAsText() shouldEqualJson """{"m.homeserver": "homeserver.example.com:1234"}"""
                 }
             }
         }
@@ -214,12 +241,13 @@ class InboundClientCheckerImplTest : ShouldSpec({
         should("should login with raw data send") {
             withCut {
                 val response = client.post("/_matrix/client/v3/login") {
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    contentType(Application.Json)
                     setBody(loginRequestString)
                 }
-                assertSoftly(response) {
-                    status shouldBe HttpStatusCode.OK
-                    bodyAsText() shouldBe loginResponseString
+
+                assertSoftly {
+                    response shouldHaveStatus OK
+                    response.bodyAsText() shouldEqualJson loginResponseString
 //                    coVerify (exactly = 1) { rawDataService.sendMessageLog(any<RawDataMetaData>()) }
                 }
             }
@@ -228,7 +256,7 @@ class InboundClientCheckerImplTest : ShouldSpec({
         should("ignore unknown url") {
             withCut {
                 val response = client.get("/blubs")
-                response.status shouldBe HttpStatusCode.NotFound
+                response shouldHaveStatus NotFound
                 response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
                     errcode = "M_UNRECOGNIZED",
                     error = "unsupported (or unknown) endpoint"
@@ -259,14 +287,14 @@ class InboundClientCheckerImplTest : ShouldSpec({
             withCut {
                 val response = client.post("/_matrix/client/v3/createRoom") {
                     bearerAuth("some.token")
-                    header(HttpHeaders.Accept, ContentType.Application.Json.toString())
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    accept(Application.Json)
+                    contentType(Application.Json)
                     setBody(Json.encodeToString(createRoomRequest))
                 }
 
-                assertSoftly(response) {
-                    status shouldBe HttpStatusCode.OK
-                    bodyAsText() shouldBe """{"room_id":"123:example.com"}"""
+                assertSoftly {
+                    response shouldHaveStatus OK
+                    response.bodyAsText() shouldEqualJson """{"room_id":"123:example.com"}"""
                 }
             }
         }
@@ -277,9 +305,7 @@ class InboundClientCheckerImplTest : ShouldSpec({
                     setBody(Json.encodeToString(createRoomRequest))
                 }
 
-                assertSoftly(response) {
-                    status shouldBe HttpStatusCode.Unauthorized
-                }
+                response shouldHaveStatus Unauthorized
             }
         }
         should("post create room should fail with invalid token") {
@@ -296,9 +322,7 @@ class InboundClientCheckerImplTest : ShouldSpec({
                     setBody(Json.encodeToString(createRoomRequest))
                 }
 
-                assertSoftly(response) {
-                    status shouldBe HttpStatusCode.Forbidden
-                }
+                response shouldHaveStatus Forbidden
             }
         }
     }
@@ -325,20 +349,42 @@ class InboundClientCheckerImplTest : ShouldSpec({
             newVersion = ""
         )
 
+        should("not create room with invalid room version type") {
+            withCut {
+                val request = createRoomRequest.copy(
+                    roomVersion = "to_be_replaced"
+                )
+
+                val body = Json.encodeToString(request).replace("\"to_be_replaced\"", "123")
+
+                val response = client.post("/_matrix/client/v3/createRoom") {
+                    bearerAuth("some.token")
+                    accept(Application.Json)
+                    contentType(Application.Json)
+                    setBody(body)
+                }
+
+                assertSoftly {
+                    response shouldHaveStatus BadRequest
+                    response.bodyAsText() shouldContain "muss ein String sein"
+                }
+            }
+        }
+
         supportedRoomVersions.forEach { roomVersion ->
             should("post create room should succeed in case of $roomVersion") {
                 val validCreateRoomRequest = createRoomRequest.copy(roomVersion = roomVersion)
                 withCut {
                     val response = client.post("/_matrix/client/v3/createRoom") {
                         bearerAuth("some.token")
-                        header(HttpHeaders.Accept, ContentType.Application.Json.toString())
-                        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                        accept(Application.Json)
+                        contentType(Application.Json)
                         setBody(Json.encodeToString(validCreateRoomRequest))
                     }
 
-                    assertSoftly(response) {
-                        status shouldBe HttpStatusCode.OK
-                        bodyAsText() shouldBe """{"room_id":"123:example.com"}"""
+                    assertSoftly {
+                        response shouldHaveStatus OK
+                        response.bodyAsText() shouldEqualJson """{"room_id":"123:example.com"}"""
                     }
                 }
             }
@@ -351,14 +397,17 @@ class InboundClientCheckerImplTest : ShouldSpec({
             withCut {
                 val response = client.post("/_matrix/client/v3/createRoom") {
                     bearerAuth("some.token")
-                    header(HttpHeaders.Accept, ContentType.Application.Json.toString())
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    accept(Application.Json)
+                    contentType(Application.Json)
                     setBody(Json.encodeToString(invalidRoomRequest))
                 }
 
-                assertSoftly(response) {
-                    status shouldBe HttpStatusCode.BadRequest
-                    bodyAsText() shouldBe """{"errcode":"M_UNSUPPORTED_ROOM_VERSION","error":"Ungültige Raumversion: ${invalidRoomRequest.roomVersion} ist keine gültige Raumversion. Es werden nur die Versionen ${supportedRoomVersions.joinToString()} unterstützt."}"""
+                assertSoftly {
+                    response shouldHaveStatus BadRequest
+                    response.bodyAsText() shouldEqualJson """{
+                        "errcode":"M_UNSUPPORTED_ROOM_VERSION",
+                        "error":"Ungültige Raumversion: ${invalidRoomRequest.roomVersion} ist keine gültige Raumversion. Es werden nur die Versionen ${supportedRoomVersions.joinToString()} unterstützt."
+                        }"""
                 }
             }
         }
@@ -369,14 +418,12 @@ class InboundClientCheckerImplTest : ShouldSpec({
                 withCut {
                     val response = client.post("/_matrix/client/v3/rooms/123:example.com/upgrade") {
                         bearerAuth("some.token")
-                        header(HttpHeaders.Accept, ContentType.Application.Json.toString())
-                        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                        accept(Application.Json)
+                        contentType(Application.Json)
                         setBody(Json.encodeToString(validUpgradeRoomRequest))
                     }
 
-                    assertSoftly(response) {
-                        status shouldBe HttpStatusCode.OK
-                    }
+                    response shouldHaveStatus OK
                 }
             }
         }
@@ -388,14 +435,109 @@ class InboundClientCheckerImplTest : ShouldSpec({
             withCut {
                 val response = client.post("/_matrix/client/v3/rooms/123:example.com/upgrade") {
                     bearerAuth("some.token")
-                    header(HttpHeaders.Accept, ContentType.Application.Json.toString())
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    accept(Application.Json)
+                    contentType(Application.Json)
                     setBody(Json.encodeToString(invalidUpgradeRoomRequest))
                 }
 
-                assertSoftly(response) {
-                    status shouldBe HttpStatusCode.BadRequest
-                    bodyAsText() shouldBe  """{"errcode":"M_UNSUPPORTED_ROOM_VERSION","error":"Ungültige Raumversion: ${invalidUpgradeRoomRequest.newVersion} ist keine gültige Raumversion. Es werden nur die Versionen ${supportedRoomVersions.joinToString()} unterstützt."}"""
+                assertSoftly {
+                    response shouldHaveStatus BadRequest
+                    response.bodyAsText() shouldEqualJson """{
+                        "errcode":"M_UNSUPPORTED_ROOM_VERSION",
+                        "error":"Ungültige Raumversion: ${invalidUpgradeRoomRequest.newVersion} ist keine gültige Raumversion. Es werden nur die Versionen ${supportedRoomVersions.joinToString()} unterstützt."
+                        }"""
+                }
+            }
+        }
+
+
+    }
+
+    context("matrix open endpoints should be authorized") {
+        context("getPublicRooms") {
+            should("return missing token") {
+                withCut {
+                    val response = client.get("/_matrix/client/v3/publicRooms")
+
+                    response.status shouldBe Unauthorized
+                    response.bodyAsText() shouldEqualJson """
+                        {
+                          "errcode": "M_MISSING_TOKEN",
+                          "error": "missing token"
+                        }"""
+                }
+            }
+
+            should("return unknown token") {
+                coEvery { matrixTokenAuthMock.invoke(any()) } returns AccessTokenAuthenticationFunctionResult(
+                    principal = null,
+                    cause = null
+                )
+                withCut {
+                    val response = client.get("/_matrix/client/v3/publicRooms") {
+                        bearerAuth("invalid.token")
+                    }
+
+                    response.status shouldBe Unauthorized
+                    response.bodyAsText() shouldEqualJson """
+                        {
+                          "errcode": "M_UNKNOWN_TOKEN",
+                          "error": "invalid token"
+                        }"""
+                }
+            }
+
+            should("should return OK with authenticated User") {
+                withCut {
+                    val response = client.get("/_matrix/client/v3/publicRooms") {
+                        bearerAuth("some.token")
+                    }
+
+                    response.status shouldBe OK
+                }
+            }
+        }
+
+        context("GetDirectoryVisibility") {
+            should("return missing token") {
+                withCut {
+                    val response = client.get("/_matrix/client/v3/directory/list/room/xxx")
+
+                    response.status shouldBe Unauthorized
+                    response.bodyAsText() shouldEqualJson """
+                        {
+                          "errcode": "M_MISSING_TOKEN",
+                          "error": "missing token"
+                        }"""
+                }
+            }
+
+            should("return unknown token") {
+                coEvery { matrixTokenAuthMock.invoke(any()) } returns AccessTokenAuthenticationFunctionResult(
+                    principal = null,
+                    cause = null
+                )
+                withCut {
+                    val response = client.get("/_matrix/client/v3/directory/list/room/xxx") {
+                        bearerAuth("invalid.token")
+                    }
+
+                    response.status shouldBe Unauthorized
+                    response.bodyAsText() shouldEqualJson """
+                        {
+                          "errcode": "M_UNKNOWN_TOKEN",
+                          "error": "invalid token"
+                        }"""
+                }
+            }
+
+            should("should return OK with authenticated User") {
+                withCut {
+                    val response = client.get("/_matrix/client/v3/directory/list/room/xxxx") {
+                        bearerAuth("some.token")
+                    }
+
+                    response.status shouldBe OK
                 }
             }
         }

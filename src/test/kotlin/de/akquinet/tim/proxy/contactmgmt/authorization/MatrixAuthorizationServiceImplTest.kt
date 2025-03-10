@@ -15,54 +15,129 @@
  */
 package de.akquinet.tim.proxy.contactmgmt.authorization
 
-import io.kotest.core.spec.style.ShouldSpec
-import io.kotest.matchers.shouldBe
+import de.akquinet.tim.proxy.authorization.MatrixAuthorizationError
+import de.akquinet.tim.proxy.authorization.MatrixAuthorizationServiceImpl
+import de.akquinet.tim.proxy.authorization.MatrixOpenIdClient
+import de.akquinet.tim.proxy.authorization.UserAuthenticationResult
+import io.kotest.assertions.arrow.core.shouldBeLeft
+import io.kotest.assertions.arrow.core.shouldBeRight
+import io.kotest.core.spec.style.FunSpec
 import io.ktor.http.*
 import io.mockk.coEvery
 import io.mockk.mockk
 
-class MatrixAuthorizationServiceImplTest : ShouldSpec({
+class MatrixAuthorizationServiceImplTest : FunSpec({
     val authClient: MatrixOpenIdClient = mockk()
 
     val matrixAuthorizationService = MatrixAuthorizationServiceImpl(authClient)
-    should("authorize should fail when mxid is missing") {
-        val headers: Headers = headersOf(Pair("auhtorize", listOf("Bearer TOKENTOKENTOKEN")))
-        matrixAuthorizationService.authorize(headers) shouldBe false
-    }
-    should("authorize should fail when authorization header is missing") {
-        val headers: Headers = headersOf(Pair("mxId", listOf("@mxid:server.example.com")))
-        matrixAuthorizationService.authorize(headers) shouldBe false
-    }
-    should("authorize should fail when authorization header is wrong") {
-        val headers: Headers =
-            headersOf(Pair("mxId", listOf("@mxid:server.example.com")), Pair("authorization", listOf("none")))
-        matrixAuthorizationService.authorize(headers) shouldBe false
-    }
-    should("authorize with actual authorization header should pass") {
-        val headers: Headers =
-            headersOf(
+
+    context("authorize") {
+        test("authorize should fail when mxid is missing") {
+            val headers: Headers = headersOf(Pair("authorize", listOf("Bearer TOKENTOKENTOKEN")))
+            matrixAuthorizationService.authorize(headers) shouldBeLeft MatrixAuthorizationError.MissingMxidHeader
+        }
+
+        test("authorize should fail when authorization header is missing") {
+            val headers: Headers = headersOf(Pair("mxId", listOf("@mxid:server.example.com")))
+            matrixAuthorizationService.authorize(headers) shouldBeLeft MatrixAuthorizationError.MissingAuthorizationHeader
+        }
+
+        test("authorize should fail when authorization header is malformed") {
+            val headers: Headers =
+                headersOf(Pair("mxId", listOf("@mxid:server.example.com")), Pair("authorization", listOf("none")))
+            matrixAuthorizationService.authorize(headers) shouldBeLeft MatrixAuthorizationError.MalformedBearerToken("none")
+        }
+
+        test("authorize with actual authorization header should pass") {
+            val headers: Headers = headersOf(
                 Pair("mxId", listOf("@mxid:server.example.com")),
                 Pair("authorization", listOf("Bearer TOKENTOKENTOKEN"))
             )
-        coEvery { authClient.authenticatedUser(any()) } returns "@mxid:server.example.com"
-        matrixAuthorizationService.authorize(headers) shouldBe true
-    }
-    should("authorize should fail when mxid does not match") {
-        val headers: Headers =
-            headersOf(
+
+            coEvery { authClient.authenticatedUser(any()) } returns UserAuthenticationResult.Success(
+                "TOKENTOKENTOKEN",
+                "@mxid:server.example.com"
+            )
+
+            matrixAuthorizationService.authorize(headers) shouldBeRight "@mxid:server.example.com"
+        }
+
+        test("authorize should fail when mxid does not match") {
+            val headers: Headers = headersOf(
                 Pair("mxId", listOf("@other:server.example.com")),
                 Pair("authorization", listOf("Bearer TOKENTOKENTOKEN"))
             )
-        coEvery { authClient.authenticatedUser(any()) } returns "@mxid:server.example.com"
-        matrixAuthorizationService.authorize(headers) shouldBe false
-    }
-    should("authorize should fail when openid auth fails") {
-        val headers: Headers =
-            headersOf(
+
+            coEvery { authClient.authenticatedUser(any()) } returns UserAuthenticationResult.Success(
+                "TOKENTOKENTOKEN",
+                "@mxid:server.example.com"
+            )
+
+            matrixAuthorizationService.authorize(headers) shouldBeLeft MatrixAuthorizationError.MxidsDoNotMatch(
+                "@other:server.example.com",
+                "@mxid:server.example.com"
+            )
+        }
+
+        test("authorize should fail when openid auth fails") {
+            val headers: Headers = headersOf(
                 Pair("mxId", listOf("@mxid:server.example.com")),
                 Pair("authorization", listOf("Bearer TOKENTOKENTOKEN"))
             )
-        coEvery { authClient.authenticatedUser(any()) } returns null
-        matrixAuthorizationService.authorize(headers) shouldBe false
+
+            coEvery { authClient.authenticatedUser(any()) } returns UserAuthenticationResult.Failure("TOKENTOKENTOKEN")
+
+            matrixAuthorizationService.authorize(headers) shouldBeLeft MatrixAuthorizationError.AuthenticationFailed("TOKENTOKENTOKEN")
+        }
+    }
+
+    context("authorizeWithoutMxid") {
+        test("authorizeWithoutMxid should fail when authorization header is missing") {
+            // Even if a mxid is provided, the method only cares about the authorization header.
+            val headers = headersOf("mxid", listOf("@mxid:server.example.com"))
+            matrixAuthorizationService.authorizeWithoutMxid(headers) shouldBeLeft MatrixAuthorizationError.MissingAuthorizationHeader
+        }
+
+        test("authorizeWithoutMxid should fail when the authorization header does not match the expected format") {
+            val headers = headersOf("authorization", listOf("none"))
+            matrixAuthorizationService.authorizeWithoutMxid(headers) shouldBeLeft MatrixAuthorizationError.MalformedBearerToken(
+                "none"
+            )
+        }
+
+        test("authorizeWithoutMxid should succeed with a valid authorization header and no mxid header") {
+            val headers = headersOf("authorization", listOf("Bearer TOKENTOKENTOKEN"))
+
+            coEvery { authClient.authenticatedUser(any()) } returns UserAuthenticationResult.Success(
+                "TOKENTOKENTOKEN",
+                "@mxid:server.example.com"
+            )
+
+            matrixAuthorizationService.authorizeWithoutMxid(headers) shouldBeRight Unit
+        }
+
+        test("authorizeWithoutMxid should succeed with a valid authorization header even when an extraneous mxid header is present") {
+            val headers = headersOf(
+                Pair("mxId", listOf("@mxid:server.example.com")),
+                Pair("authorization", listOf("Bearer TOKENTOKENTOKEN"))
+            )
+
+            coEvery { authClient.authenticatedUser(any()) } returns UserAuthenticationResult.Success(
+                "TOKENTOKENTOKEN",
+                "@mxid:server.example.com"
+            )
+
+            matrixAuthorizationService.authorizeWithoutMxid(headers) shouldBeRight Unit
+        }
+
+        test("authorizeWithoutMxid should fail when openid auth fails") {
+            val headers = headersOf("authorization", listOf("Bearer TOKENTOKENTOKEN"))
+
+            coEvery { authClient.authenticatedUser(any()) } returns UserAuthenticationResult.Failure("TOKENTOKENTOKEN")
+
+            matrixAuthorizationService.authorizeWithoutMxid(headers) shouldBeLeft MatrixAuthorizationError.AuthenticationFailed(
+                "TOKENTOKENTOKEN"
+            )
+        }
     }
 })

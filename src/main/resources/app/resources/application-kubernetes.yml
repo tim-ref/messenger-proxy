@@ -23,6 +23,7 @@ registrationServiceConfig:
   federationListEndpoint: ${REGISTRATION_SERVICE_FEDERATION_LIST_ENDPOINT}
   invitePermissionCheckEndpoint: ${REGISTRATION_SERVICE_INVITE_PERMISSION_CHECK_ENDPOINT}
   readinessEndpoint: ${REGISTRATION_SERVICE_READINESS_ENDPOINT}
+  wellKnownSupportEndpoint: ${REGISTRATION_SERVICE_WELL_KNOWN_SUPPORT_ENDPOINT:-/backend/well-known-support}
 
 federationListCache:
   baseDirectory: "federationList"
@@ -53,6 +54,9 @@ actuatorConfig:
 
 contactManagement:
   port: ${CONTACT_MANAGEMENT_PORT}
+
+tiMessengerInformationConfiguration:
+  port: ${TIM_INFORMATION_PORT:-7777}
 
 database:
   jdbcUrl: ${PROXY_DB_URL}

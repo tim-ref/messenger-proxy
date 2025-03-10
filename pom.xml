@@ -10,7 +10,7 @@
 
     <groupId>de.akquinet.timref.fachdienst.messenger-proxy</groupId>
     <artifactId>mp-backend</artifactId>
-    <version>0.6.1</version>
+    <version>0.7.0</version>
 
     <name>Messenger-Proxy</name>
     <description>Messenger-Proxy für die TIM Referenzimplementierung</description>
@@ -267,6 +267,12 @@
             <version>5.1.1</version>
         </dependency>
 
+        <dependency>
+            <groupId>io.arrow-kt</groupId>
+            <artifactId>arrow-core</artifactId>
+            <version>1.2.4</version> <!-- 2.0.0 needs Kotlin upgrade -->
+        </dependency>
+
         <!-- test dependencies -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -309,6 +315,12 @@
             <groupId>io.kotest.extensions</groupId>
             <artifactId>kotest-assertions-ktor-jvm</artifactId>
             <version>2.0.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.kotest.extensions</groupId>
+            <artifactId>kotest-assertions-arrow-jvm</artifactId>
+            <version>1.4.0</version> <!-- Arrow 1.2.4 -->
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -462,7 +474,7 @@
                 <groupId>org.openapitools</groupId>
                 <artifactId>openapi-generator-maven-plugin</artifactId>
                 <executions>
-                   <execution>
+                    <execution>
                         <id>generate-gematik-contactManagement-models</id>
                         <goals>
                             <goal>generate</goal>
@@ -471,8 +483,11 @@
                         <configuration>
                             <generatorName>kotlin</generatorName>
                             <library>jvm-okhttp4</library>
-                            <inputSpec>${project.basedir}/src/main/resources/static/openapi-gematik-contactManagement.yaml</inputSpec>
-                            <modelPackage>de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement</modelPackage>
+                            <inputSpec>
+                                ${project.basedir}/src/main/resources/static/openapi-gematik-contactManagement.yaml
+                            </inputSpec>
+                            <modelPackage>de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement
+                            </modelPackage>
                             <skipValidateSpec>true</skipValidateSpec>
                             <generateSupportingFiles>false</generateSupportingFiles>
                             <generateApis>false</generateApis>
@@ -941,7 +956,7 @@
     <scm>
         <connection>${env.CI_SCM_CONNECTION}</connection>
         <developerConnection>${env.CI_SCM_DEVELOPER_CONNECTION}</developerConnection>
-        <tag>0.6.1</tag>
+        <tag>0.7.0</tag>
         <url>${env.CI_SCM_URL}</url>
     </scm>
 </project>

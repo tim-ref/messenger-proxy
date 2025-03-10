@@ -23,6 +23,8 @@ import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.rawdata.model.RawDataMetaData
 import de.akquinet.tim.shouldEqualJsonMatrixStandard
 import io.kotest.assertions.assertSoftly
+import io.kotest.assertions.json.shouldEqualJson
+import io.kotest.assertions.ktor.client.shouldHaveStatus
 import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeTypeOf
@@ -31,6 +33,13 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.http.ContentType.Application
+import io.ktor.http.HttpHeaders.Authorization
+import io.ktor.http.HttpHeaders.Host
+import io.ktor.http.HttpStatusCode.Companion.Forbidden
+import io.ktor.http.HttpStatusCode.Companion.NotFound
+import io.ktor.http.HttpStatusCode.Companion.OK
+import io.ktor.http.HttpStatusCode.Companion.Unauthorized
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -111,15 +120,14 @@ class OutboundFederationCheckerImplTest : ShouldSpec({
                 hosts(externalUrl) {
                     routing {
                         get("/_matrix/federation/v1/event/1234") {
-                            call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                            call.respond(eventResponseString)
+                            call.respondText(eventResponseString, Application.Json)
                         }
                         post("/_matrix/federation/v1/user/keys/claim") {
                             call.request.uri shouldBe "/_matrix/federation/v1/user/keys/claim?test=test"
-                            call.receiveText() shouldBe """{"one_time_keys":{}}"""
-                            call.request.headers[HttpHeaders.ContentType] shouldBe ContentType.Application.Json.toString()
-                            call.response.header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                            call.respond("""{"one_time_keys":{}}""")
+                            call.receiveText() shouldEqualJson """{"one_time_keys":{}}"""
+                            call.request.contentType() shouldBe Application.Json
+
+                            call.respondText("""{"one_time_keys":{}}""", Application.Json)
                         }
                     }
                 }
@@ -127,7 +135,7 @@ class OutboundFederationCheckerImplTest : ShouldSpec({
                     routing {
                         post(rawDataPath) {
                             Json.decodeFromString<RawDataMetaData>(call.receiveText()).shouldBeTypeOf<RawDataMetaData>()
-                            call.request.headers[HttpHeaders.ContentType] shouldBe ContentType.Application.Json.toString()
+                            call.request.contentType() shouldBe Application.Json
                         }
                     }
                 }
@@ -136,37 +144,40 @@ class OutboundFederationCheckerImplTest : ShouldSpec({
         }
     }
 
+    fun HttpMessageBuilder.matrixAuthorizationHeader() {
+        header(
+            Authorization,
+            """X-Matrix origin="thisHost",destination="fed",key="ed25519:ABC",sig="signature""""
+        )
+    }
+
     context("authorization needed") {
         suspend fun HttpClient.postKeyClaimAuthenticated() =
             post("/_matrix/federation/v1/user/keys/claim?test=test") {
-                header(HttpHeaders.Host, externalHost)
-                header(
-                    HttpHeaders.Authorization,
-                    """X-Matrix origin="thisHost",destination="fed",key="ed25519:ABC",sig="signature""""
-                )
-                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                header(Host, externalHost)
+                matrixAuthorizationHeader()
+                contentType(Application.Json)
                 setBody("""{"one_time_keys":{}}""")
             }
 
         suspend fun HttpClient.getEventAuthenticated() =
             get("/_matrix/federation/v1/event/1234") {
-                header(HttpHeaders.Host, externalHost)
-                header(
-                    HttpHeaders.Authorization,
-                    """X-Matrix origin="thisHost",destination="fed",key="ed25519:ABC",sig="signature""""
-                )
+                header(Host, externalHost)
+                matrixAuthorizationHeader()
             }
 
         should("should forward get event with raw data send") {
             withCut {
-                federationListCacheMock.domains.value = setOf(
-                    "fed"
+                federationListCacheMock.domains.value += FederationList.FederationDomain(
+                    domain = "fed",
+                    isInsurance = true,
+                    telematikID = "telematik"
                 )
                 val response = client.getEventAuthenticated()
 
                 assertSoftly(response) {
-                    status shouldBe HttpStatusCode.OK
-                    bodyAsText() shouldBe eventResponseString
+                    response shouldHaveStatus OK
+                    bodyAsText() shouldEqualJson eventResponseString
 //                    coVerify (exactly = 1) { rawDataService.sendMessageLog(any<RawDataMetaData>()) }
                 }
             }
@@ -174,30 +185,78 @@ class OutboundFederationCheckerImplTest : ShouldSpec({
 
         should("forward federated domain") {
             withCut {
-                federationListCacheMock.domains.value = setOf(
-                    "fed"
+                federationListCacheMock.domains.value += FederationList.FederationDomain(
+                    domain = "fed",
+                    isInsurance = true,
+                    telematikID = "telematik"
                 )
                 val response = client.postKeyClaimAuthenticated()
-                response.status shouldBe HttpStatusCode.OK
-                response.bodyAsText() shouldBe """{"one_time_keys":{}}"""
+
+                response shouldHaveStatus OK
+                response.bodyAsText() shouldEqualJson """{"one_time_keys":{}}"""
             }
         }
         // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-Messenger-Dienst/gemSpec_TI-Messenger-Dienst_V1.1.1/#8.3
         should("deny unfederated domain") {
             withCut {
+                federationListCacheMock.domains.value -= FederationList.FederationDomain(
+                    domain = "fed",
+                    isInsurance = true,
+                    telematikID = "telematik"
+                )
                 val response = client.postKeyClaimAuthenticated()
-                response.status shouldBe HttpStatusCode.Forbidden
+
+                response shouldHaveStatus Forbidden
                 response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
                     errcode = "M_FORBIDDEN",
                     error = "not part of federation"
                 )
             }
         }
+
+        /**
+         * A_26330
+         * Der Matrix Homeserver MUSS ausgehende Requests zum Endpunkt /_matrix/federation/v1/version gemäß
+         * [Server-Server API/#request-authentication] authentisieren.
+         */
+        should("forward requests for server version with authentication") {
+            withCut {
+                externalServices {
+                    hosts(externalUrl) {
+                        routing {
+                            get("/_matrix/federation/v1/version") {
+                                val authorizationHeader = call.request.authorization()
+                                val isMatrixAuthHeader = authorizationHeader?.startsWith("X-Matrix ") ?: false
+                                if (isMatrixAuthHeader) {
+                                    call.respondText("""{"msg":"ok"}""", Application.Json)
+                                } else {
+                                    call.respond(Unauthorized)
+                                }
+                            }
+                        }
+                    }
+                }
+                federationListCacheMock.domains.value += FederationList.FederationDomain(
+                    domain = "fed",
+                    isInsurance = true,
+                    telematikID = "telematik"
+                )
+
+                val response = client.get("/_matrix/federation/v1/version") {
+                    header(Host, externalHost)
+                    matrixAuthorizationHeader()
+                }
+
+                response.bodyAsText() shouldBe """{"msg":"ok"}"""
+            }
+        }
     }
+
     should("ignore unknown url") {
         withCut {
-            val response = client.get("/blubs") { header(HttpHeaders.Host, externalHost) }
-            response.status shouldBe HttpStatusCode.NotFound
+            val response = client.get("/blubs") { header(Host, externalHost) }
+
+            response shouldHaveStatus NotFound
             response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
                 errcode = "M_UNRECOGNIZED",
                 error = "unsupported (or unknown) endpoint"

@@ -18,8 +18,6 @@
 # thus the used image you are using locally can be outdated
 FROM matrixdotorg/sytest-synapse:bullseye
 
-ARG TARGETARCH
-
 ENV SYTEST_PLUGINS=/plugins
 ENV SYTEST_LIB=/sytest/lib
 # SYNAPSE_VERSION and SYTEST_BRANCH should match
@@ -31,19 +29,15 @@ ENV APP_HOME=/messenger-proxy
 
 LABEL maintainer="TIMREF Maintainers"
 
-RUN apt-get update && \
-    apt-get install -y wget nginx libtap-formatter-junit-perl libtap-formatter-html-perl openssl && \
-    apt-get clean
+# The "bullseye" sytest image is based on a version of Debian that does not know openjdk-21-jdk yet.
+# So we use adoptium to install termurin-21-jdk instead.
+# Note that the tests previously failed with a manual Java21 installation but they now work under temurin.
+RUN wget -O - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor | tee /usr/share/keyrings/adoptium.gpg > /dev/null \
+    && echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bullseye main" | tee /etc/apt/sources.list.d/adoptium.list
 
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-	wget https://download.oracle.com/java/21/latest/jdk-21_linux-aarch64_bin.tar.gz && \
-	mkdir -p /opt/java && \
-	tar -xzf jdk-21_linux-aarch64_bin.tar.gz -C /opt/java; \
-else \
-	wget https://download.oracle.com/java/21/latest/jdk-21_linux-x64_bin.tar.gz && \
-	mkdir -p /opt/java && \
-	tar -xzf jdk-21_linux-x64_bin.tar.gz -C /opt/java; \
-fi
+RUN apt-get update && \
+    apt-get install -y gnupg2 temurin-21-jdk nginx libtap-formatter-junit-perl libtap-formatter-html-perl openssl && \
+    apt-get clean
 
 WORKDIR $APP_HOME
 
@@ -62,4 +56,4 @@ COPY $JAR_FILE "$APP_HOME/mp-backend-jar-with-dependencies.jar"
 # allow failing
 RUN /bin/bash /bootstrap.sh messenger_proxy || :
 
-RUN env PATH="/opt/java/jdk-21.0.6/bin:$PATH" "$SYTEST_PLUGINS/messenger-proxy/scripts/messenger_proxy_sytest.sh"
+RUN "$SYTEST_PLUGINS/messenger-proxy/scripts/messenger_proxy_sytest.sh"

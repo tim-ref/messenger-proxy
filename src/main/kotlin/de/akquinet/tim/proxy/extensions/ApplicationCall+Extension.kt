@@ -20,13 +20,13 @@ import io.ktor.http.HttpStatusCode.Companion.BadRequest
 import io.ktor.http.HttpStatusCode.Companion.InternalServerError
 import io.ktor.http.HttpStatusCode.Companion.NotFound
 import io.ktor.http.HttpStatusCode.Companion.Unauthorized
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.response.respond
+import io.ktor.server.application.*
+import io.ktor.server.response.*
 
 suspend fun ApplicationCall.unauthorized(message: String = "UNAUTHORIZED") =
     this.respond(Unauthorized, message)
 
-suspend fun ApplicationCall.badRequestMissingParameter(parameter: String, message: String = "Missing parameter '$parameter'") =
+suspend fun ApplicationCall.badRequest(message: String) =
     this.respond(
         status = BadRequest,
         message = Error(
@@ -35,26 +35,18 @@ suspend fun ApplicationCall.badRequestMissingParameter(parameter: String, messag
         )
     )
 
-suspend fun ApplicationCall.badRequestEmptyOrIncorrectBody(message: String = "Incorrect or empty body") =
-    this.respond(
-        status = BadRequest,
-        message = Error(
-            errorCode = BadRequest.toString(),
-            errorMessage = message
-        )
-    )
-
-suspend fun ApplicationCall.notFound(message: String = "Contact does not exist") =
+suspend fun ApplicationCall.notFound(message: String) =
     this.respond(
         status = NotFound,
-        message  = Error(
+        message = Error(
             errorCode = NotFound.toString(),
             errorMessage = message
         )
     )
 
-suspend fun ApplicationCall.internalServerError(message: String = "An internal server error occured") =
-    this.respond(InternalServerError,
+suspend fun ApplicationCall.internalServerError(message: String) =
+    this.respond(
+        InternalServerError,
         Error(
             errorCode = InternalServerError.toString(),
             errorMessage = message

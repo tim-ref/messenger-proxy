@@ -27,9 +27,9 @@ import de.akquinet.tim.proxy.contactmgmt.ContactManagementApi
 import de.akquinet.tim.proxy.contactmgmt.ContactManagementApiImpl
 import de.akquinet.tim.proxy.contactmgmt.ContactRoutes
 import de.akquinet.tim.proxy.contactmgmt.ContactRoutesImpl
-import de.akquinet.tim.proxy.contactmgmt.authorization.MatrixAuthorizationService
-import de.akquinet.tim.proxy.contactmgmt.authorization.MatrixAuthorizationServiceImpl
-import de.akquinet.tim.proxy.contactmgmt.authorization.MatrixOpenIdClient
+import de.akquinet.tim.proxy.authorization.MatrixAuthorizationService
+import de.akquinet.tim.proxy.authorization.MatrixAuthorizationServiceImpl
+import de.akquinet.tim.proxy.authorization.MatrixOpenIdClient
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementServiceImpl
 import de.akquinet.tim.proxy.contactmgmt.database.DatabaseFactory
@@ -37,6 +37,7 @@ import de.akquinet.tim.proxy.federation.*
 import de.akquinet.tim.proxy.logging.LogLevelService
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
+import de.akquinet.tim.proxy.tiMessengerInformation.TiMessengerInformationApi
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -75,6 +76,7 @@ suspend fun main(): Unit = coroutineScope {
     launch { koin.get<OutboundProxy>().start() }
     launch { koin.get<ActuatorRoutes>().start() }
     launch { koin.get<ContactManagementApiImpl>().start() }
+    launch { koin.get<TiMessengerInformationApi>().start() }
 }
 
 private fun initiateKoin(config: ProxyConfiguration) = koinApplication {
@@ -93,7 +95,8 @@ private fun initiateKoin(config: ProxyConfiguration) = koinApplication {
             single { config.prometheusClient }
             single { config.logInfoConfig }
             single { config.logLevelResetConfig }
-            single { config.timAuthorizationCheckConfiguration}
+            single { config.timAuthorizationCheckConfiguration }
+            single { config.tiMessengerInformationConfiguration }
             single { FileSystem.SYSTEM }
 
             configureDatabase(config)
@@ -127,6 +130,7 @@ private fun initiateKoin(config: ProxyConfiguration) = koinApplication {
             singleOf(::RawDataServiceImpl).bind<RawDataService>()
             singleOf(::ContactManagementApiImpl).bind<ContactManagementApi>()
             singleOf(::BerechtigungsstufeEinsService) { bind<BerechtigungsstufeEinsService>() }
+            singleOf(::TiMessengerInformationApi) { bind<TiMessengerInformationApi>() }
         })
 }.koin
 

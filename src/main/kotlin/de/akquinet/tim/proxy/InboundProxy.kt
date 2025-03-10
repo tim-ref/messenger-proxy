@@ -97,6 +97,15 @@ class InboundProxyImpl(
                         }
                     }
 
+                    route("/_matrix/federation/v1/publicRooms") {
+                        handle {
+                            throw MatrixServerException(
+                                HttpStatusCode.Forbidden,
+                                ErrorResponse.Forbidden("A_26520")
+                            )
+                        }
+                    }
+
                     route("/_synapse/admin/{...}") {
                         handle {
                             forwardRequest(

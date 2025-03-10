@@ -19,14 +19,18 @@ import de.akquinet.tim.proxy.*
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
 import de.akquinet.tim.proxy.extensions.toUriFormat
 import de.akquinet.tim.proxy.federation.model.route.InviteV1
+import de.akquinet.tim.proxy.federation.model.route.SendJoinV1
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.model.Operation
 import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -35,10 +39,11 @@ import net.folivo.trixnity.api.server.matrixEndpointResource
 import net.folivo.trixnity.core.ErrorResponse
 import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.core.MatrixServerException
+import net.folivo.trixnity.core.model.RoomId
 import net.folivo.trixnity.core.model.UserId
+import net.folivo.trixnity.core.model.events.m.room.JoinRulesEventContent
 import net.folivo.trixnity.serverserverapi.model.discovery.GetWellKnown
-import net.folivo.trixnity.serverserverapi.model.federation.GetEvent
-import net.folivo.trixnity.serverserverapi.model.federation.Invite
+import net.folivo.trixnity.serverserverapi.model.federation.*
 
 private val kLog = KotlinLogging.logger { }
 
@@ -82,6 +87,39 @@ class InboundFederationRoutesImpl(
                 handleInvite(call)
             }
         }
+
+        matrixEndpointResource<MakeJoin> {
+            handleJoinRoom(call)
+        }
+
+        matrixEndpointResource<SendJoin> {
+            handleJoinRoom(call)
+        }
+
+        // SendJoinV1 is deprecated and this call should be removed in future versions
+        matrixEndpointResource<SendJoinV1> {
+            handleJoinRoom(call)
+        }
+
+    }
+
+    private suspend fun handleJoinRoom(call: ApplicationCall) {
+        val roomId = call.parameters["roomId"]?.let { RoomId(it) }
+
+        val response = httpClient.get("${config.homeserverUrl}/_matrix/client/v3/publicRooms")
+
+        if (response.status == HttpStatusCode.OK){
+            val body = Json {
+                ignoreUnknownKeys = true
+            }.decodeFromString<GetPublicRoomsResponse>(response.bodyAsText())
+
+            val toJoinedRoom = body.chunk.find { c -> c.roomId == roomId }
+            if (toJoinedRoom?.joinRule == JoinRulesEventContent.JoinRule.Public) {
+                throw MatrixServerException(HttpStatusCode.Forbidden, ErrorResponse.Forbidden("Cannot join public rooms owned by other home servers"))
+            }
+        }
+
+        forwardRequest(call, httpClient, call.request.getDestinationUrl(), null)
     }
 
     private suspend fun handleInvite(call: ApplicationCall) {

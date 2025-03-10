@@ -16,6 +16,7 @@
 package de.akquinet.tim.proxy.federation
 
 import de.akquinet.tim.proxy.federation.model.route.InviteV1
+import de.akquinet.tim.proxy.federation.model.route.SendJoinV1
 import de.akquinet.tim.proxy.forwardRequest
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.model.Operation
@@ -29,16 +30,15 @@ import io.ktor.server.application.call
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.uri
 import io.ktor.server.routing.Route
-import mu.KotlinLogging
 import net.folivo.trixnity.api.server.matrixEndpointResource
 import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.serverserverapi.model.discovery.GetWellKnown
 import net.folivo.trixnity.serverserverapi.model.federation.GetEvent
 import net.folivo.trixnity.serverserverapi.model.federation.Invite
+import net.folivo.trixnity.serverserverapi.model.federation.MakeJoin
+import net.folivo.trixnity.serverserverapi.model.federation.SendJoin
 
 interface OutboundFederationRoutes : FederationRoutes
-
-private val log = KotlinLogging.logger { }
 
 class OutboundFederationRoutesImpl(
     private val httpClient: HttpClient,
@@ -58,6 +58,9 @@ class OutboundFederationRoutesImpl(
         forwardWithRawData<InviteV1>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER)
         forwardWithRawData<GetEvent>(Operation.MP_EXCHANGE_EVENT_OUTSIDE_ORGANISATION_SENDER)
         forwardEndpoint<GetWellKnown>()
+        forwardEndpoint<SendJoin>()
+        forwardEndpoint<SendJoinV1>()
+        forwardEndpoint<MakeJoin>()
     }
 
     private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardWithRawData(timOperation: Operation) =

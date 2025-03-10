@@ -1,7 +1,7 @@
 #!/bin/bash -xe
 
 #
-# Modified by akquinet GmbH on 13.01.2025
+# Modified by akquinet GmbH on 28.02.2025
 #
 # Originally from https://github.com/matrix-org/sytest
 #
@@ -29,7 +29,8 @@
 
 # Run the sytests.
 
-set -e
+# Enable verbose logging and error tracking
+set -xe
 
 cd "$(dirname $0)/.."
 
@@ -41,24 +42,77 @@ else
   export MESSENGER_PROXY_DIR=/messenger-proxy
 fi
 
-# generating a new ca key to use ecdsa instead of rsa
 pushd /sytest/keys
-rm ca.key ca.crt tls-selfsigned.crt tls-selfsigned.key
-# CA
-openssl ecparam -name prime256v1 -genkey -noout -out ca.key
-openssl req -new -x509 -days 3650 -config $MESSENGER_PROXY_DIR/certificates/ca.conf -key ca.key -out ca.crt
+
+# Create a logging directory
+mkdir -p /logs/ssl_cert_generation
+
+# Logging function
+log_step() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /logs/ssl_cert_generation/cert_generation.log
+}
+
+# Error handling function
+handle_error() {
+    echo "[ERROR] Step failed: $1" | tee -a cert_generation_error.log
+    cat /logs/ssl_cert_generation/tls_cert_generation.log
+    exit 1
+}
+
+log_step "Starting certificate generation process"
+
+# Remove existing certificates with logging
+log_step "Removing existing certificate files"
+rm -v ca.key ca.crt tls-selfsigned.crt tls-selfsigned.key 2>/logs/ssl_cert_generation/file_removal.log
+
+# CA Certificate Generation with extensive logging
+log_step "Generating CA private key"
+openssl ecparam -name prime256v1 -genkey -noout -out ca.key 2>/logs/ssl_cert_generation/ca_key_generation.log || handle_error "CA key generation"
+
+log_step "Creating CA certificate"
+openssl req -new -x509 -days 3650 \
+    -config "$MESSENGER_PROXY_DIR/certificates/ca.conf" \
+    -key ca.key \
+    -out ca.crt \
+     2>/logs/ssl_cert_generation/ca_cert_creation.log || handle_error "CA certificate creation"
+
+log_step "Consolidating CA key and certificate"
 cat ca.key > ca.pem
 cat ca.crt >> ca.pem
-# tls-selfsigned
-openssl genrsa -out tls-selfsigned.key 2048
-openssl req -new -key tls-selfsigned.key -out tls-selfsigned.csr -subj /CN=localhost
+
+# Self-signed TLS Certificate Generation
+log_step "Generating RSA private key for self-signed certificate"
+openssl genrsa -out tls-selfsigned.key 2048 2>/logs/ssl_cert_generation/tls_key_generation.log || handle_error "TLS key generation"
+
+log_step "Creating certificate signing request"
+openssl req -new \
+    -key tls-selfsigned.key \
+    -out tls-selfsigned.csr \
+    -subj "/CN=localhost" \
+    -verbose 2>/logs/ssl_cert_generation/tls_csr_creation.log || handle_error "CSR creation"
+
+log_step "Creating subject alternative name extension file"
 cat << EOF > tls-selfsigned.ext
 subjectAltName=DNS:localhost
 EOF
-openssl x509 -req -in tls-selfsigned.csr -CA ca.crt -CAkey ca.key -set_serial 1 -out tls-selfsigned.crt -extfile tls-selfsigned.ext
-# adding the sytest ca to the ubuntu root ca so java trusts the certificates
+
+log_step "Generating self-signed certificate"
+openssl x509 -req \
+    -in tls-selfsigned.csr \
+    -CA ca.crt \
+    -CAkey ca.key \
+    -set_serial 1 \
+    -out tls-selfsigned.crt \
+    -extfile tls-selfsigned.ext \
+    -days 365 \
+     2>/logs/ssl_cert_generation/tls_cert_generation.log || handle_error "Self-signed certificate generation"
+
+log_step "Adding CA to Ubuntu root certificates"
 cp ca.crt /usr/local/share/ca-certificates
-update-ca-certificates
+update-ca-certificates 2>/logs/ssl_cert_generation/ca_update.log || handle_error "CA certificate update"
+
+log_step "Certificate generation completed successfully"
+
 popd
 
 # increase general timeouts, otherwise the test results are  flaky

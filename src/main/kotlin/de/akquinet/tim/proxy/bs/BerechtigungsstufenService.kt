@@ -21,5 +21,5 @@ class BerechtigungsstufeEinsService(
     private val federationListCache: FederationListCache
 ) {
 
-    fun areDomainsFederated(domains: Set<String>): Boolean = federationListCache.domains.value.containsAll(domains)
+    fun areDomainsFederated(domains: Set<String>): Boolean = federationListCache.domainNames().containsAll(domains)
 }

@@ -13,25 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import io.ktor.http.*
+package de.akquinet.tim.proxy.client.model.route
+
 import io.ktor.resources.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import net.folivo.trixnity.clientserverapi.model.rooms.GetPublicRoomsResponse
 import net.folivo.trixnity.core.HttpMethod
-import net.folivo.trixnity.core.HttpMethodType.GET
+import net.folivo.trixnity.core.HttpMethodType
 import net.folivo.trixnity.core.MatrixEndpoint
-import net.folivo.trixnity.core.WithoutAuth
 
 /**
- * @see <a href="https://spec.matrix.org/v1.10/client-server-api/#get_matrixclientv3loginssoredirect">matrix spec</a>
+ * @see <a href="https://spec.matrix.org/v1.10/client-server-api/#get_matrixclientv3publicrooms">matrix spec</a>
+ * Endpoint should be authorized A_26518
  */
 @Serializable
-@Resource("/_matrix/client/v3/login/sso/redirect")
-@HttpMethod(GET)
-@WithoutAuth
-data class SSORedirect(
-    @SerialName("redirectUrl") val redirectUrl: String,
-) : MatrixEndpoint<Unit, Unit> {
-    override val responseContentType: ContentType?
-        get() = null
-}
+@Resource("/_matrix/client/v3/publicRooms")
+@HttpMethod(HttpMethodType.GET)
+data class GetPublicRooms(
+    @SerialName("limit") val limit: Long? = null,
+    @SerialName("server") val server: String? = null,
+    @SerialName("since") val since: String? = null
+) : MatrixEndpoint<Unit, GetPublicRoomsResponse>

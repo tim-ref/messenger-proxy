@@ -13,25 +13,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import io.ktor.http.*
+package de.akquinet.tim.proxy.client.model.route
+
 import io.ktor.resources.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import net.folivo.trixnity.clientserverapi.model.rooms.DirectoryVisibility
 import net.folivo.trixnity.core.HttpMethod
 import net.folivo.trixnity.core.HttpMethodType.GET
 import net.folivo.trixnity.core.MatrixEndpoint
-import net.folivo.trixnity.core.WithoutAuth
+import net.folivo.trixnity.core.model.RoomId
 
 /**
- * @see <a href="https://spec.matrix.org/v1.10/client-server-api/#get_matrixclientv3loginssoredirect">matrix spec</a>
+ * @see <a href="https://spec.matrix.org/v1.10/client-server-api/#get_matrixclientv3directorylistroomroomid">matrix spec</a>
+ * Endpoint should be authorized A_26518
  */
 @Serializable
-@Resource("/_matrix/client/v3/login/sso/redirect")
+@Resource("/_matrix/client/v3/directory/list/room/{roomId}")
 @HttpMethod(GET)
-@WithoutAuth
-data class SSORedirect(
-    @SerialName("redirectUrl") val redirectUrl: String,
-) : MatrixEndpoint<Unit, Unit> {
-    override val responseContentType: ContentType?
-        get() = null
+data class GetDirectoryVisibility(
+    @SerialName("roomId") val roomId: RoomId,
+) : MatrixEndpoint<Unit, GetDirectoryVisibility.Response> {
+    @Serializable
+    data class Response(
+        @SerialName("visibility") val visibility: DirectoryVisibility
+    )
 }

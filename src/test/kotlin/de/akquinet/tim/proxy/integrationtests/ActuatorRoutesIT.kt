@@ -22,6 +22,7 @@ import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
+import de.akquinet.tim.proxy.federation.FederationList
 import de.akquinet.tim.proxy.federation.InboundFederationRoutesImpl
 import de.akquinet.tim.proxy.federation.OutboundFederationRoutesImpl
 import de.akquinet.tim.proxy.logging.LogLevelService
@@ -82,7 +83,8 @@ class ActuatorRoutesIT {
         healthPort = "8071",
         readinessEndpoint = "/actuator/health/readiness",
         federationListEndpoint = "",
-        invitePermissionCheckEndpoint = ""
+        invitePermissionCheckEndpoint = "",
+        wellKnownSupportEndpoint = "/backend/well-known-support"
     )
 
     private val logLevelResetConfiguration = ProxyConfiguration.LogLevelResetConfiguration(
@@ -105,11 +107,6 @@ class ActuatorRoutesIT {
         synapsePort = 443,
         enforceDomainList = true,
         accessTokenToUserIdCacheDuration = 1.hours
-    )
-
-    private var timAuthorizationCheckConfiguration = ProxyConfiguration.TimAuthorizationCheckConfiguration(
-        TimAuthorizationCheckConcept.CLIENT,
-        InviteRejectionPolicy.ALLOW_ALL
     )
 
     private val embeddedPostgres: EmbeddedPostgres = EmbeddedPostgres.start()
@@ -147,7 +144,14 @@ class ActuatorRoutesIT {
         bsEinsService = BerechtigungsstufeEinsService(federationListCacheMock)
         rawDataServiceStub = RawDataServiceStub()
         // always trust server itself
-        federationListCacheMock.domains.update { it + "$virtualHostname:$matrixHttpsPort" + "$externalMatrixHostname:$matrixHttpsPort" }
+        federationListCacheMock.domains.update {
+            it +
+                    FederationList.FederationDomain(
+                        domain = "$virtualHostname:$matrixHttpsPort$externalMatrixHostname:$matrixHttpsPort",
+                        isInsurance = true,
+                        telematikID = "telematik"
+                    )
+        }
 
         val outboundProxyCertificateManager =
             OutboundProxyCertificateManagerImpl(outboundProxyConfig, FileSystem.RESOURCES)
@@ -170,7 +174,8 @@ class ActuatorRoutesIT {
                     timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
                     httpClient = httpClient,
                     berechtigungsstufeEinsService = bsEinsService,
-                    rawDataService = rawDataServiceStub
+                    rawDataService = rawDataServiceStub,
+                    regServiceConfig = regServerConfig
                 ),
                 inboundFederationRoutes = InboundFederationRoutesImpl(
                     inboundProxyConfig,

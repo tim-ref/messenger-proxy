@@ -65,13 +65,24 @@ class InboundClientRoutesSSORedirectTest : ShouldSpec({
 
         val bsEinsService = BerechtigungsstufeEinsService(FederationListCacheMock())
 
+        val regServiceConfig = ProxyConfiguration.RegistrationServiceConfiguration(
+            baseUrl = "https://reg-service",
+            servicePort = "8080",
+            healthPort = "8081",
+            federationListEndpoint = "/backend/federation",
+            invitePermissionCheckEndpoint = "/backend/vzd/invite",
+            readinessEndpoint = "/actuator/health/readiness",
+            wellKnownSupportEndpoint = "/backend/well-known-support"
+        )
+
         val inboundClientRoutes = InboundClientRoutesImpl(
             config = inboundProxyConfig,
             logConfiguration = logInfoConfig,
             timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
             httpClient = client,
             rawDataService = rawDataService,
-            berechtigungsstufeEinsService = bsEinsService
+            berechtigungsstufeEinsService = bsEinsService,
+            regServiceConfig = regServiceConfig
         )
 
         customMatrixServer(Json) {

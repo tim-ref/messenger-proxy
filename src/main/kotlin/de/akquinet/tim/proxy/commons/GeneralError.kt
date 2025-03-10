@@ -13,20 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package de.akquinet.tim.proxy.commons
 
-package de.akquinet.tim.proxy.client.model.route.account_data
-
-import de.akquinet.tim.proxy.ProxyConfiguration
-import kotlinx.serialization.Serializable
-
-/**
- * [A_25258](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.0.0/#A_25258)
- * [JSON schema](https://github.com/gematik/api-ti-messenger/blob/main/src/schema/permissionConfig.json)
- */
-@Serializable
-data class PermissionConfig(
-    val defaultSetting: DefaultSetting,
-)
-
-fun ProxyConfiguration.TimAuthorizationCheckConfiguration.asPermissionConfig() =
-    PermissionConfig(this.inviteRejectionPolicy.asDefaultSetting())
+interface GeneralError {
+    val message: String
+}

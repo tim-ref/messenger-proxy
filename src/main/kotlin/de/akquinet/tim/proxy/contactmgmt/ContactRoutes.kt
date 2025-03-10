@@ -15,16 +15,19 @@
  */
 package de.akquinet.tim.proxy.contactmgmt
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.raise.either
+import arrow.core.raise.ensure
+import arrow.core.raise.ensureNotNull
 import de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement.Contact
 import de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement.Contacts
-import de.akquinet.tim.fachdienst.messengerproxy.gematik.model.contactmanagement.Error
-import de.akquinet.tim.proxy.contactmgmt.authorization.MatrixAuthorizationService
+import de.akquinet.tim.proxy.authorization.MatrixAuthorizationService
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
-import de.akquinet.tim.proxy.contactmgmt.model.ContactEntity
+import de.akquinet.tim.proxy.contactmgmt.model.ContactManagementError
 import de.akquinet.tim.proxy.extensions.*
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.model.Operation
-import io.ktor.http.HttpStatusCode.Companion.InternalServerError
 import io.ktor.http.HttpStatusCode.Companion.NoContent
 import io.ktor.http.HttpStatusCode.Companion.OK
 import io.ktor.http.HttpStatusCode.Companion.Unauthorized
@@ -53,53 +56,79 @@ class ContactRoutesImpl(
         private const val TIM_CONTACT_MGMT = "/tim-contact-mgmt"
     }
 
+    private suspend fun <R> Either<ContactManagementError, R>.handle(
+        call: ApplicationCall,
+        handleRight: suspend ApplicationCall.(R) -> Unit,
+    ) =
+        onLeft { error ->
+            when (error) {
+                is ContactManagementError.Unauthorized -> call.unauthorized(error.message)
+                is ContactManagementError.MissingParameter -> call.badRequest(error.message)
+                is ContactManagementError.ContactNotFound -> call.notFound(error.message)
+                is ContactManagementError.ContactMalformed -> call.badRequest(error.message)
+                is ContactManagementError.ContactAlreadyExists -> call.internalServerError(error.message)
+                is ContactManagementError.ContactCouldNotBeCreated -> call.internalServerError(error.message)
+                is ContactManagementError.ContactCouldNotBeUpdated -> call.internalServerError(error.message)
+            }
+        }.onRight { result -> call.handleRight(result) }
+
     override fun Route.apiRoutes() {
 
         get(TIM_CONTACT_MGMT) {
-            call.respond(
-                OK, contactManagementService.getInfo()
-            )
+            call.respond(OK, contactManagementService.getInfo())
         }
 
         get("$TIM_CONTACT_MGMT/contacts") {
             val requestHeaders = call.request.headers
-            val mxid = requestHeaders["mxid"]
 
-            if (!matrixAuthorizationService.authorize(requestHeaders) || mxid == null) return@get call.unauthorized()
-
-            val contactList = contactManagementService.findContactsOf(mxid).map { it.toDto() }
-            val contacts = Contacts(contactList)
-            call.respond(OK, contacts)
+            matrixAuthorizationService.authorize(requestHeaders)
+                .mapLeft { ContactManagementError.Unauthorized(it) }
+                .handle(call) { mxid ->
+                    val contactList = contactManagementService.findContactsOf(mxid).map { it.toDto() }
+                    val contacts = Contacts(contactList)
+                    respond(OK, contacts)
+                }
         }
 
         get("$TIM_CONTACT_MGMT/contacts/") {
-            call.badRequestMissingParameter("id")
+            ContactManagementError.MissingParameter("id").left().handle(call) {}
         }
 
         get("$TIM_CONTACT_MGMT/contacts/{id}") {
-            val approvedMxid = call.parameters["id"] ?: return@get call.badRequestMissingParameter("id")
-            val requestHeaders = call.request.headers
-            val mxid = requestHeaders["mxid"]
+            either {
+                val approvedMxid = ensureNotNull(call.parameters["id"]) {
+                    ContactManagementError.MissingParameter("id")
+                }
 
-            if (!matrixAuthorizationService.authorize(requestHeaders) || mxid == null) return@get call.unauthorized()
+                val requestHeaders = call.request.headers
 
-            contactManagementService.getContact(mxid, approvedMxid)?.toDto()?.let {
-                call.respond(OK, it)
-            } ?: call.notFound()
+                val mxid = matrixAuthorizationService.authorize(requestHeaders).mapLeft {
+                    ContactManagementError.Unauthorized(it)
+                }.bind()
+
+                val contact = ensureNotNull(contactManagementService.getContact(mxid, approvedMxid)) {
+                    ContactManagementError.ContactNotFound(mxid, approvedMxid)
+                }
+
+                contact.toDto()
+            }.handle(call) {
+                respond(OK, it)
+            }
         }
 
         post("$TIM_CONTACT_MGMT/contacts") {
             val start = System.nanoTime()
 
-            val contact = try {
-                call.receive<Contact>()
-            } catch (e: Exception) {
-                return@post call.badRequestEmptyOrIncorrectBody()
-            }
+            either {
+                val contact = Either.catch {
+                    call.receive<Contact>()
+                }.mapLeft {
+                    ContactManagementError.ContactMalformed(it)
+                }.bind()
 
-            val mxid = call.request.headers["mxid"]
-            if (!matrixAuthorizationService.authorize(call.request.headers) || mxid == null) {
-                call.unauthorized().also {
+                val mxid = matrixAuthorizationService.authorize(call.request.headers).mapLeft {
+                    ContactManagementError.Unauthorized(it)
+                }.onLeft {
                     rawDataService.contactRawDataForward(
                         call.request,
                         Unauthorized,
@@ -107,87 +136,99 @@ class ContactRoutesImpl(
                         System.nanoTime() - start,
                         Operation.MP_INVITE_OUTSIDE_ORGANISATION_ADD_TO_CONTACT_MANAGEMENT_LIST
                     )
-                }
-                return@post
-            }
+                }.bind()
 
-            var wasCreated: ContactEntity? = null
-            if (contactManagementService.getContact(mxid, contact.mxid) == null) try {
-                wasCreated = contactManagementService.addContactTo(
-                    ownerMxid = mxid, contactEntity = contact.toEntity(
-                        ownerId = mxid, uuid = null
-                    )
-                )
-            } catch (_: Exception) {
-                //no logging necessary
-            }
-
-            val status = if (wasCreated != null) OK else InternalServerError
-            wasCreated?.toDto()?.let { contactDto ->
-                call.respond(status, contactDto).also {
-                    rawDataService.contactRawDataForward(
-                        call.request,
-                        status,
-                        Json.encodeToString(contactDto).length.toLong(),
-                        System.nanoTime() - start,
-                        Operation.MP_INVITE_OUTSIDE_ORGANISATION_ADD_TO_CONTACT_MANAGEMENT_LIST
-                    )
+                ensure(contactManagementService.getContact(mxid, contact.mxid) == null) {
+                    ContactManagementError.ContactAlreadyExists(mxid, contact.mxid)
                 }
-            } ?: call.respond(
-                status = status, message = Error(
-                    errorCode = status.toString(), errorMessage = "Contact could not be created"
+
+                val created = Either.catch {
+                    contactManagementService.addContactTo(
+                        ownerMxid = mxid, contactEntity = contact.toEntity(
+                            ownerId = mxid, uuid = null
+                        )
+                    )
+                }.mapLeft { throwable ->
+                    ContactManagementError.ContactCouldNotBeCreated(mxid, throwable)
+                }.bind()
+
+                ensureNotNull(created) {
+                    ContactManagementError.ContactCouldNotBeCreated(mxid)
+                }
+
+                created.toDto()
+            }.handle(call) { contactDto ->
+                rawDataService.contactRawDataForward(
+                    call.request,
+                    OK,
+                    Json.encodeToString(contactDto).length.toLong(),
+                    System.nanoTime() - start,
+                    Operation.MP_INVITE_OUTSIDE_ORGANISATION_ADD_TO_CONTACT_MANAGEMENT_LIST
                 )
-            )
+
+                respond(OK, contactDto)
+            }
         }
 
         delete("$TIM_CONTACT_MGMT/contacts/") {
-            call.badRequestMissingParameter("id")
+            ContactManagementError.MissingParameter("id").left().handle(call) {}
         }
 
         delete("$TIM_CONTACT_MGMT/contacts/{id}") {
-            val approvedMxid = call.parameters["id"] ?: return@delete call.badRequestMissingParameter("id")
-            val requestHeaders = call.request.headers
-            val mxid = requestHeaders["mxid"]
+            either {
+                val approvedMxid = ensureNotNull(call.parameters["id"]) {
+                    ContactManagementError.MissingParameter("id")
+                }
 
-            if (!matrixAuthorizationService.authorize(requestHeaders) || mxid == null) return@delete call.unauthorized()
+                val requestHeaders = call.request.headers
 
-            if (contactManagementService.deleteContactSetting(mxid, approvedMxid)) {
-                call.respond(NoContent)
-            } else {
-                call.notFound()
+                val mxid = matrixAuthorizationService.authorize(requestHeaders)
+                    .mapLeft { ContactManagementError.Unauthorized(it) }.bind()
+
+                ensure(contactManagementService.deleteContactSetting(mxid, approvedMxid)) {
+                    ContactManagementError.ContactNotFound(mxid, approvedMxid)
+                }
+            }.handle(call) {
+                respond(NoContent)
             }
         }
 
         put("$TIM_CONTACT_MGMT/contacts") {
-            val contact = try {
-                call.receive<Contact>()
-            } catch (e: Exception) {
-                return@put call.badRequestEmptyOrIncorrectBody()
-            }
+            either {
+                val contact = Either.catch {
+                    call.receive<Contact>()
+                }.mapLeft {
+                    ContactManagementError.ContactMalformed(it)
+                }.bind()
 
-            val requestHeaders = call.request.headers
-            val mxid = requestHeaders["mxid"]
+                val requestHeaders = call.request.headers
 
-            if (!matrixAuthorizationService.authorize(requestHeaders) || mxid == null) return@put call.unauthorized()
+                val mxid = matrixAuthorizationService.authorize(requestHeaders).mapLeft {
+                    ContactManagementError.Unauthorized(it)
+                }.bind()
 
-            contactManagementService.getContact(mxid, contact.mxid)?.let { foundContact ->
-                if (contactManagementService.updateContactSetting(
-                        ownerMxid = mxid, contactEntity = contact.toEntity(
-                            ownerId = mxid, uuid = foundContact.id.toString()
-                        )
-                    )
-                ) {
-                    contactManagementService.getContact(mxid, contact.mxid)?.let {
-                        call.respond(OK, it.toDto())
-                    } ?: run {
-                        log.error { "Could not find updated ContactEntity" }
-                        call.internalServerError("Contact could not be updated")
-                    }
-                } else {
-                    log.error { "Could not update ContactEntity" }
-                    call.internalServerError("Contact could not be updated")
+                val foundContact = ensureNotNull(contactManagementService.getContact(mxid, contact.mxid)) {
+                    ContactManagementError.ContactNotFound(mxid, contact.mxid)
                 }
-            } ?: call.notFound()
+
+                val update = contactManagementService.updateContactSetting(
+                    ownerMxid = mxid, contactEntity = contact.toEntity(
+                        ownerId = mxid, uuid = foundContact.id.toString()
+                    )
+                )
+
+                ensure(update) {
+                    log.error { "Could not update ContactEntity" }
+                    ContactManagementError.ContactCouldNotBeUpdated(mxid)
+                }
+
+                ensureNotNull(contactManagementService.getContact(mxid, contact.mxid)) {
+                    log.error { "Could not find updated ContactEntity" }
+                    ContactManagementError.ContactCouldNotBeUpdated(mxid)
+                }.toDto()
+            }.handle(call) {
+                respond(OK, it)
+            }
         }
     }
 }

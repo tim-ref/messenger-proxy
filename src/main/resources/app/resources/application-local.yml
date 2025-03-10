@@ -23,6 +23,7 @@ registrationServiceConfig:
   federationListEndpoint: "/backend/federation"
   invitePermissionCheckEndpoint: "/backend/vzd/invite"
   readinessEndpoint: "/actuator/health/readiness"
+  wellKnownSupportEndpoint: "/backend/well-known-support"
 
 federationListCache:
   baseDirectory: "federationList"
@@ -50,6 +51,9 @@ outboundProxy:
 actuatorConfig:
   port: 1233
   basePath: "/actuator"
+
+tiMessengerInformationConfiguration:
+  port: 7777
 
 contactManagement:
   port: 8070

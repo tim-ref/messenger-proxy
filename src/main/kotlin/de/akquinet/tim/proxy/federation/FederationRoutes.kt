@@ -15,7 +15,9 @@
  */
 package de.akquinet.tim.proxy.federation
 
-import de.akquinet.tim.proxy.client.model.route.*
+import de.akquinet.tim.proxy.client.model.route.DownloadMediaV1
+import de.akquinet.tim.proxy.client.model.route.DownloadThumbnailV1
+import de.akquinet.tim.proxy.client.model.route.GetServerKeyById
 import de.akquinet.tim.proxy.federation.model.route.*
 import de.akquinet.tim.proxy.forwardRequest
 import de.akquinet.tim.proxy.forwardRequestWithoutCallReceival
@@ -25,12 +27,12 @@ import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import net.folivo.trixnity.api.server.matrixEndpointResource
+import net.folivo.trixnity.clientserverapi.model.media.DownloadMediaLegacy
 import net.folivo.trixnity.clientserverapi.model.media.DownloadThumbnailLegacy
 import net.folivo.trixnity.clientserverapi.model.media.GetMediaConfig
 import net.folivo.trixnity.clientserverapi.model.media.GetMediaConfigLegacy
 import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.serverserverapi.model.discovery.GetServerKeys
-import net.folivo.trixnity.serverserverapi.model.discovery.GetServerVersion
 import net.folivo.trixnity.serverserverapi.model.discovery.QueryServerKeys
 import net.folivo.trixnity.serverserverapi.model.discovery.QueryServerKeysByServer
 import net.folivo.trixnity.serverserverapi.model.federation.*
@@ -47,7 +49,7 @@ abstract class FederationRoutesImpl(
         // see A_26224
         forwardEndpoint<GetServerKeys>()
         forwardEndpoint<QueryServerKeysByServer>()
-        forwardEndpoint<GetServerVersion>()
+        forwardEndpoint<GetServerVersionRequireAuth>()
         forwardEndpoint<QueryServerKeys>()
         forwardEndpoint<CheckPubkeyValidity>()
         forwardEndpoint<SendTransaction>()
@@ -56,9 +58,6 @@ abstract class FederationRoutesImpl(
         forwardEndpoint<GetMissingEvents>()
         forwardEndpoint<GetState>()
         forwardEndpoint<GetStateIds>()
-        forwardEndpoint<MakeJoin>()
-        forwardEndpoint<SendJoin>()
-        forwardEndpoint<SendJoinV1>()
         forwardEndpoint<MakeKnock>()
         forwardEndpoint<SendKnock>()
         forwardEndpoint<MakeLeave>()
@@ -66,7 +65,6 @@ abstract class FederationRoutesImpl(
         forwardEndpoint<SendLeaveV1>()
         forwardEndpoint<OnBindThirdPid>()
         forwardEndpoint<ExchangeThirdPartyInvite>()
-        forwardEndpoint<GetPublicRooms>()
         forwardEndpoint<GetPublicRoomsWithFilter>()
         forwardEndpoint<GetHierarchy>()
         forwardEndpoint<QueryDirectory>()
@@ -76,11 +74,11 @@ abstract class FederationRoutesImpl(
         forwardEndpoint<GetKeys>()
 
         // media
-        forwardEndpointWithoutCallRecieval<DownloadMedia>()
-        forwardEndpointWithoutCallRecieval<DownloadMediaR0>()
+        forwardEndpointWithoutCallReceival<DownloadMedia>()
+        forwardEndpointWithoutCallReceival<DownloadMediaLegacy>()
+        forwardEndpointWithoutCallReceival<DownloadMediaR0>()
         // media V1 --> A_26262
-        forwardEndpointWithoutCallRecieval<DownloadMediaV1>()
-
+        forwardEndpointWithoutCallReceival<DownloadMediaV1>()
         forwardEndpoint<DownloadThumbnail>()
         forwardEndpoint<DownloadThumbnailLegacy>()
         forwardEndpoint<DownloadThumbnailR0>()
@@ -114,7 +112,7 @@ abstract class FederationRoutesImpl(
             forwardRequest(call, httpClient, call.request.getDestinationUrl(), null)
         }
 
-    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpointWithoutCallRecieval() {
+    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpointWithoutCallReceival() {
         matrixEndpointResource<ENDPOINT> {
             forwardRequestWithoutCallReceival(call, httpClient, call.request.getDestinationUrl())
         }

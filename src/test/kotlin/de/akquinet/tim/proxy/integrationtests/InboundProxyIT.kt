@@ -20,30 +20,48 @@ import de.akquinet.tim.proxy.InboundProxyImpl
 import de.akquinet.tim.proxy.InviteRejectionPolicy
 import de.akquinet.tim.proxy.ProxyConfiguration
 import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
-import de.akquinet.tim.proxy.*
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
+import de.akquinet.tim.proxy.defaultConfig
+import de.akquinet.tim.proxy.federation.FederationList
 import de.akquinet.tim.proxy.federation.InboundFederationRoutesImpl
-import de.akquinet.tim.proxy.mocks.*
-import io.kotest.assertions.json.shouldEqualJson
+import de.akquinet.tim.proxy.homeserverWithRouting
 import de.akquinet.tim.proxy.mocks.ContactManagementStub
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.RawDataServiceStub
 import de.akquinet.tim.proxy.mocks.VZDPublicIDCheckMock
+import de.akquinet.tim.proxy.proxyWithClientServerRoutes
 import de.akquinet.tim.shouldEqualJsonMatrixStandard
+import io.kotest.assertions.assertSoftly
+import io.kotest.assertions.json.shouldEqualJson
 import io.kotest.matchers.shouldBe
-import io.ktor.client.*
-import io.ktor.client.engine.okhttp.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.client.plugins.logging.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
-import io.ktor.serialization.kotlinx.json.*
-import io.ktor.server.engine.*
-import io.ktor.server.testing.*
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.logging.LogLevel
+import io.ktor.client.plugins.logging.Logging
+import io.ktor.client.request.accept
+import io.ktor.client.request.get
+import io.ktor.client.request.headers
+import io.ktor.client.request.post
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType.Application.Json
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode.Companion.BadRequest
+import io.ktor.http.HttpStatusCode.Companion.Forbidden
+import io.ktor.http.HttpStatusCode.Companion.NotFound
+import io.ktor.http.HttpStatusCode.Companion.OK
+import io.ktor.http.contentType
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.application.call
+import io.ktor.server.engine.ApplicationEngine
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.put
+import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -52,12 +70,6 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.time.Duration.Companion.hours
-import io.kotest.assertions.assertSoftly
-import io.ktor.http.ContentType.Application.Json
-import io.ktor.http.HttpStatusCode.Companion.OK
-import io.ktor.server.application.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
 
 const val proxy = "http://localhost:8090"
 const val homeserver = "http://localhost:8083"
@@ -121,7 +133,13 @@ class InboundProxyIT {
         bsEinsService = BerechtigungsstufeEinsService(federationListCacheMock)
         rawDataServiceStub = RawDataServiceStub()
         // always trust server itself
-        federationListCacheMock.domains.update { it + "$virtualHostname:$matrixHttpsPort" + "$externalMatrixHostname:$matrixHttpsPort" }
+        federationListCacheMock.domains.update {
+            it + FederationList.FederationDomain(
+                domain = "$virtualHostname:$matrixHttpsPort$externalMatrixHostname:$matrixHttpsPort",
+                isInsurance = true,
+                telematikID = "telematik"
+            )
+        }
 
         inboundApplicationEngine =
             InboundProxyImpl(
@@ -136,7 +154,16 @@ class InboundProxyIT {
                     timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
                     httpClient = httpClient,
                     rawDataService = rawDataServiceStub,
-                    berechtigungsstufeEinsService = bsEinsService
+                    berechtigungsstufeEinsService = bsEinsService,
+                    ProxyConfiguration.RegistrationServiceConfiguration(
+                        baseUrl = "https://reg-service",
+                        servicePort = "8080",
+                        healthPort = "8081",
+                        federationListEndpoint = "/backend/federation",
+                        invitePermissionCheckEndpoint = "/backend/vzd/invite",
+                        readinessEndpoint = "/actuator/health/readiness",
+                        wellKnownSupportEndpoint = "/backend/well-known-support"
+                    )
                 ),
                 inboundFederationRoutes = InboundFederationRoutesImpl(
                     inboundProxyConfig,
@@ -161,7 +188,7 @@ class InboundProxyIT {
     fun shouldReturnWellknownHostnameFromRequest() = runTest {
         val response = httpClient.get(wellKnownEndpoint)
 
-        response.status shouldBe HttpStatusCode.OK
+        response.status shouldBe OK
         response.bodyAsText() shouldBe "{\"m.server\":\"localhost:443\"}"
     }
 
@@ -170,7 +197,7 @@ class InboundProxyIT {
     fun shouldReturnNotFoundOnNotExistentRoute() = runTest {
         val response = httpClient.get(unknownEndpoint)
 
-        response.status shouldBe HttpStatusCode.NotFound
+        response.status shouldBe NotFound
         response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
             errcode = "M_NOT_FOUND",
             error = "No resource was found for this request."
@@ -181,7 +208,7 @@ class InboundProxyIT {
     fun shouldReturnBadRequestOnBadRequestException() = runTest {
         val response = httpClient.put(pushRuleWithoutTemplateEndpoint)
 
-        response.status shouldBe HttpStatusCode.BadRequest
+        response.status shouldBe BadRequest
         // the error message in the real application environment is "Can't transform call to resource"
         response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
             errcode = "M_UNKNOWN",
@@ -193,10 +220,10 @@ class InboundProxyIT {
     fun shouldReturnBadRequestForRequestToGetToken() = runTest {
         val response = httpClient.post(getTokenEndpoint)
 
-        response.status shouldBe HttpStatusCode.NotFound
+        response.status shouldBe NotFound
 
         response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
-                    errcode = "M_NOT_FOUND",
+            errcode = "M_NOT_FOUND",
             error = "No resource was found for this request."
         )
     }
@@ -210,13 +237,29 @@ class InboundProxyIT {
             setBody("{}")
         }
 
-        response.status shouldBe HttpStatusCode.Forbidden
+        response.status shouldBe Forbidden
 
         response.bodyAsText() shouldEqualJson
-            """{
+                """{
                     "errcode": "M_FORBIDDEN",
                     "error":"Guest access is disabled"
                     }"""
+    }
+
+    @Test
+    fun shouldReturnForbiddenForPublicRooms() = runTest {
+        val response = httpClient.post("$proxy/_matrix/federation/v1/publicRooms") {
+            headers {
+                append(HttpHeaders.ContentType, "application/json")
+                append(
+                    HttpHeaders.Authorization,
+                    """X-Matrix origin="fed",destination="otherHost:80",key="ed25519:ABC",sig="signature""""
+                )
+            }
+            setBody("{}")
+        }
+
+        response.status shouldBe Forbidden
     }
 
     @Test
@@ -249,9 +292,9 @@ class InboundProxyIT {
                 setBody(requestBody)
             }
 
-            response.status shouldBe HttpStatusCode.BadRequest
+            response.status shouldBe BadRequest
             response.bodyAsText() shouldEqualJson
-                """{
+                    """{
                     "errcode": "M_TOO_LARGE",
                     "error":"Key is longer than 1 character"
                 }"""
@@ -330,7 +373,7 @@ class InboundProxyIT {
                 setBody(requestBody)
             }
 
-            response.status shouldBe HttpStatusCode.BadRequest
+            response.status shouldBe BadRequest
             response.bodyAsText() shouldEqualJson """
             {
               "errcode": "M_FORBIDDEN",

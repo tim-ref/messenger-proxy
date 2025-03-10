@@ -13,38 +13,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.akquinet.tim.proxy.contactmgmt.authorization
+package de.akquinet.tim.proxy.authorization
 
 import de.akquinet.tim.proxy.ProxyConfiguration
-import de.akquinet.tim.proxy.contactmgmt.model.SuccessfulOpenIdResponse
 import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.serialization.json.Json
 
-class MatrixOpenIdClient(private val httpClient: HttpClient, private val inboundProxyConfiguration: ProxyConfiguration.InboundProxyConfiguration) {
+class MatrixOpenIdClient(
+    private val httpClient: HttpClient,
+    private val inboundProxyConfiguration: ProxyConfiguration.InboundProxyConfiguration
+) {
 
-    suspend fun authenticatedUser(token: String): String? {
+    suspend fun authenticatedUser(token: String): UserAuthenticationResult {
         val openIdResponse = sendOpenIdRequest(token)
         return when (openIdResponse.status) {
             HttpStatusCode.OK -> {
-                Json.decodeFromString<SuccessfulOpenIdResponse>(openIdResponse.call.response.bodyAsText()).sub
+                val responseBody = openIdResponse.call.response.bodyAsText()
+                val mxid = Json.decodeFromString<SuccessfulOpenIdResponse>(responseBody).sub
+                UserAuthenticationResult.Success(token, mxid)
             }
-            else -> {
-                null
-            }
+
+            else -> UserAuthenticationResult.Failure(token)
         }
     }
 
-    private suspend fun sendOpenIdRequest(token: String): HttpResponse {
-        return httpClient.get(buildOpenIdUri(token))
-    }
+    private suspend fun sendOpenIdRequest(token: String): HttpResponse = httpClient.get(buildOpenIdUri(token))
 
-    private fun buildOpenIdUri(token: String): String {
-        return inboundProxyConfiguration.let {
+    private fun buildOpenIdUri(token: String): String =
+        inboundProxyConfiguration.let {
             "${it.homeserverUrl}/_matrix/federation/v1/openid/userinfo?access_token=${token}"
         }
-    }
-
 }

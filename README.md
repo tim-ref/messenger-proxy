@@ -53,38 +53,37 @@ technologies:
    2. Windows: `C:\Windows\System32\Drivers\etc\hosts`
 3. Use the [CA configuration file](certificates/ca.conf) to create x509 certificates:
 
- ```bash
- cd certificates
- openssl ecparam -name prime256v1 -genkey -noout -out ca.key
- openssl req -new -x509 -days 3650 -config ca.conf -key ca.key -out ca.crt
- cat ca.key > key.pem
- cat ca.crt >> key.pem
- 
- ```
+   ```shell
+   cd certificates
+   openssl ecparam -name prime256v1 -genkey -noout -out ca.key
+   openssl req -new -x509 -days 3650 -config ca.conf -key ca.key -out ca.crt
+   cat ca.key > key.pem
+   cat ca.crt >> key.pem
+   ```
 4. Create a docker network with the name `timref-network` if it not already exists
 
-```shell
-$ docker network create timref-network
-```
+   ```shell
+   docker network create timref-network
+   ```
 5. The application should be built at least once because the build artifact is used to create the docker image. This can be done like so:
     ```shell
-    $ ./mvnw clean install
+    ./mvnw clean install
     ```
    
 6. The components of this project can be started by using
 
-```shell
-$ docker compose up
-```
+   ```shell
+   docker compose up
+   ```
 
 7. (Only possible if you did step 1) To test if a connection from the `messenger proxy` to the `registration service` could be established, run the following commands in your terminal:
-      ```shell
-      $ docker exec -it messenger_proxy_synapse bash
-      ```
+   ```shell
+   docker exec -it messenger_proxy_synapse bash
+   ```
    After that run this command inside the bash of the container:
-      ```shell
-      $ curl backend:8080
-      ``` 
+   ```shell
+   curl backend:8080
+   ``` 
    The answer should be a html string containing "HTTP Status 404 – Not Found".
 
 ---
@@ -106,7 +105,7 @@ Please note that the `messenger proxy` run from `docker compose` must be stopped
 
 ---
 
-To run the application use the IntelliJ Idea [Run Configuration called Messenger Proxy](.run/Messenger Proxy.run.xml)
+To run the application use the IntelliJ Idea [Run Configuration called Messenger Proxy](.run/Messenger%20Proxy.run.xml)
 can be used.
 If you cannot use the predefined Run Configuration and want to start the application via the terminal, you must set a
 local environment variable ```CONFIGURATION_FILE_PATH``` with the value "src/main/resources/application-local.yml".
@@ -188,6 +187,13 @@ The checks are carried out using the path in the calling URL.
 
 2. For the request to `/_matrix/client/versions`, 
 the `Messenger Proxy` processes the Synapse response so that only version tags <= v1.11 are returned.
+
+### well known support information
+Request to `/.well-known/matrix/support` are forwarded to `/backend/well-known-support/[serverName]` endpoint of the 
+`registration service`, where `serverName` reflects to the actual homeserver hostname.
+To be able to test the functionality, start the `registration_service` with `docker compose` in the dedicated project. 
+Make sure the `serverName` exists in the database and configure the support information to your needs. You can specify 
+the serverName by setting `logInfoConfig.homeFQDN` in [resources](src/main/resources/app/resources/application-local-docker.yml)
 
 ### ways of communication
 1. Connection to registration service

@@ -16,6 +16,8 @@
 package de.akquinet.tim.proxy.contactmgmt.authorization
 
 import de.akquinet.tim.proxy.ProxyConfiguration
+import de.akquinet.tim.proxy.authorization.MatrixOpenIdClient
+import de.akquinet.tim.proxy.authorization.UserAuthenticationResult
 import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldEndWith
@@ -30,19 +32,27 @@ import kotlin.time.Duration.Companion.hours
 class MatrixOpenIdClientTest : ShouldSpec({
     should("get authenticatedUser") {
         val matrixAuthClient = matrixOpenIdClient("@mxid:server.example.com")
-        matrixAuthClient.authenticatedUser("TOKEN") shouldBe "@mxid:server.example.com"
+        matrixAuthClient.authenticatedUser("TOKEN") shouldBe UserAuthenticationResult.Success(
+            token = "TOKEN",
+            mxid = "@mxid:server.example.com"
+        )
     }
+
     should("get no mxid when user is not authenticated") {
         val matrixAuthClient = matrixOpenIdClient("", statusCode = HttpStatusCode.Forbidden)
-        matrixAuthClient.authenticatedUser("TOKEN") shouldBe null
+        matrixAuthClient.authenticatedUser("TOKEN") shouldBe UserAuthenticationResult.Failure("TOKEN")
     }
-    should("should use token") {
+
+    should("use token") {
         val matrixAuthClient =
             matrixOpenIdClient(verifyUrl = {
                 it.fullPath shouldEndWith "/_matrix/federation/v1/openid/userinfo?access_token=ACCESS_TOKEN"
                 it.hostWithPort shouldBe "localhost:7070"
             })
-        matrixAuthClient.authenticatedUser("ACCESS_TOKEN") shouldBe ""
+        matrixAuthClient.authenticatedUser("ACCESS_TOKEN") shouldBe UserAuthenticationResult.Success(
+            token = "ACCESS_TOKEN",
+            mxid = ""
+        )
     }
 })
 

@@ -1,5 +1,4 @@
 /*
- * Copyright 2022 Trixnity
  * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,33 +13,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package de.akquinet.tim.proxy.federation.model.route
 
-import io.ktor.http.*
 import io.ktor.resources.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
-import net.folivo.trixnity.clientserverapi.model.media.Media
 import net.folivo.trixnity.core.HttpMethod
-import net.folivo.trixnity.core.HttpMethodType.GET
+import net.folivo.trixnity.core.HttpMethodType
 import net.folivo.trixnity.core.MatrixEndpoint
+import net.folivo.trixnity.serverserverapi.model.discovery.GetServerVersion
 
 /**
- * @see <a href="https://spec.matrix.org/legacy/client_server/r0.6.1.html#get-matrix-media-r0-download-servername-mediaid">matrix spec</a>
+ * @see <a href="https://spec.matrix.org/v1.11/server-server-api/#get_matrixfederationv1version">matrix spec</a>
+ * Removed authentication in compliance with <a href="https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_26331">A_26331</a>.
  */
 @Serializable
-@Resource("/_matrix/media/r0/download/{serverName}/{mediaId}")
-@HttpMethod(GET)
-data class DownloadMediaR0(
-    @SerialName("serverName") val serverName: String,
-    @SerialName("mediaId") val mediaId: String,
-    @SerialName("allow_remote") val allowRemote: Boolean? = null
-) : MatrixEndpoint<Unit, Media> {
-
-    @Transient
-    override val requestContentType = ContentType.Application.Json
-
-    @Transient
-    override val responseContentType = ContentType.Application.OctetStream
+@Resource("/_matrix/federation/v1/version")
+@HttpMethod(HttpMethodType.GET)
+object GetServerVersionRequireAuth : MatrixEndpoint<Unit, GetServerVersion.Response> {
+    @Serializable
+    data class Response(
+        @SerialName("server") val server: Server,
+    ) {
+        @Serializable
+        data class Server(
+            @SerialName("name") val name: String,
+            @SerialName("version") val version: String,
+        )
+    }
 }

@@ -97,14 +97,25 @@ fun defaultConfig(
     rawDataService: RawDataService = RawDataServiceStub(),
     berechtigungsstufeEinsService: BerechtigungsstufeEinsService = BerechtigungsstufeEinsService(
         FederationListCacheMock()
-    )
+    ),
+    regServiceConfig: ProxyConfiguration.RegistrationServiceConfiguration =
+        ProxyConfiguration.RegistrationServiceConfiguration(
+            baseUrl = "https://reg-service",
+            servicePort = "8080",
+            healthPort = "8081",
+            federationListEndpoint = "/backend/federation",
+            invitePermissionCheckEndpoint = "/backend/vzd/invite",
+            readinessEndpoint = "/actuator/health/readiness",
+            wellKnownSupportEndpoint = "/backend/well-known-support"
+        )
 ) = InboundClientRoutesImpl(
     config,
     logConfiguration,
     timAuthorizationCheckConfiguration,
     httpClient,
     rawDataService,
-    berechtigungsstufeEinsService
+    berechtigungsstufeEinsService,
+    regServiceConfig
 )
 
 /**
