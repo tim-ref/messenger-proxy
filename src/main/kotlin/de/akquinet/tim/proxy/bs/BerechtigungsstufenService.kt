@@ -21,5 +21,8 @@ class BerechtigungsstufeEinsService(
     private val federationListCache: FederationListCache
 ) {
 
-    fun areDomainsFederated(domains: Set<String>): Boolean = federationListCache.domainNames().containsAll(domains)
+    /**
+     * If you receive an unfederated domain, consider [A_25534 - Fehlschlag Föderationsprüfung](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_25534)
+     */
+    fun isUnfederatedDomain(domain: String): Boolean = !federationListCache.domainNames().contains(domain)
 }

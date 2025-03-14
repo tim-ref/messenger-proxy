@@ -31,7 +31,7 @@ import net.folivo.trixnity.core.WithoutAuth
 @WithoutAuth
 data class SSORedirectTo(
     @SerialName("idpId") val idpId: String,
-    @SerialName("redirectUrl") val redirectUrl: String,
+    @SerialName("redirectUrl") val redirectUrl: String? = null,
 ) : MatrixEndpoint<Unit, Unit> {
     override val responseContentType: ContentType?
         get() = null

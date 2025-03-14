@@ -157,7 +157,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                     authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
                         with(
                             InboundFederationRoutesImpl(
-                                ProxyConfiguration.InboundProxyConfiguration(
+                                config = ProxyConfiguration.InboundProxyConfiguration(
                                     enforceDomainList = true,
                                     homeserverUrl = destinationUrl,
                                     synapseHealthEndpoint = "/health",
@@ -165,11 +165,12 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                                     port = 443,
                                     accessTokenToUserIdCacheDuration = 1.hours
                                 ),
-                                this@testApplication.client,
-                                rawDataService,
-                                contactManagementService,
-                                vzdPublicMock,
-                                timAuthorizationCheckConfiguration
+                                httpClient = this@testApplication.client,
+                                rawDataService = rawDataService,
+                                contactManagementService = contactManagementService,
+                                vzdPublicIDCheck = vzdPublicMock,
+                                timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
+                                berechtigungsstufeEinsService = bsEinsService,
                             )
                         ) {
                             serverServerApiRoutes()
@@ -196,15 +197,15 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                             call.respondText("{}", Application.Json)
                         }
                         put("/_matrix/federation/v2/send_join/{roomId}/{eventId}") {
-                            call.respondText("{}", ContentType.Application.Json)
+                            call.respondText("{}", Application.Json)
                         }
                         get("/_matrix/federation/v1/make_join/{roomId}/{userId}") {
-                            call.respondText("{}", ContentType.Application.Json)
+                            call.respondText("{}", Application.Json)
                         }
                         get("/_matrix/client/v3/publicRooms") {
                             call.respondText(
-                                contentType = ContentType.Application.Json,
-                                status = HttpStatusCode.OK,
+                                contentType = Application.Json,
+                                status = OK,
                                 text = publicRooms
                             )
                         }
@@ -344,7 +345,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
     }
 
     context("federation invite") {
-        suspend fun HttpClient.putInvite(inviting: String) =
+        suspend fun HttpClient.putInvite(inviting: String, invited: String = "@joe:fed") =
             put("/_matrix/federation/v2/invite/{roomId}/{eventId}") {
                 matrixAuthorizationHeader()
                 contentType(Application.Json)
@@ -358,7 +359,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                         "origin": "matrix.org",
                         "origin_server_ts": 1234567890,
                         "sender": "$inviting",
-                        "state_key": "@joe:elsewhere.com",
+                        "state_key": "$invited",
                         "type": "m.room.member"
                       },
                       "invite_room_state": [
@@ -454,6 +455,29 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                 response shouldHaveStatus OK
             }
         }
+
+        // AF_10064-02 - Föderationszugehörigkeit eines Messenger-Service prüfen
+        // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#AF_10064-02
+        // A_25534 - Fehlschlag Föderationsprüfung
+        // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_25534
+        should("reject invites from users outside of federation") {
+            withCut {
+                federationListCacheMock.domains.value = setOf(
+                    FederationList.FederationDomain(
+                        domain = "fed",
+                        isInsurance = true,
+                        telematikID = "telematik"
+                    )
+                )
+                val response = client.putInvite(inviting = "@someone:matrix.org", invited = "@invitee:unfederated.org")
+
+                response shouldHaveStatus Forbidden
+                response.bodyAsText() shouldEqualJson """{
+                        "errcode": "M_FORBIDDEN" ,
+                        "error": "unfederated.org kann nicht in der Föderation gefunden werden"
+                    }"""
+            }
+        }
     }
 
     context("join public rooms") {
@@ -461,10 +485,10 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         suspend fun HttpClient.sendJoin(roomAlias: String) =
             put("/_matrix/federation/v2/send_join/$roomAlias:myServer.com/1234") {
                 header(
-                    HttpHeaders.Authorization,
+                    Authorization,
                     """X-Matrix origin="fed",destination="myServer:80",key="ed25519:ABC",sig="signature""""
                 )
-                contentType(ContentType.Application.Json)
+                contentType(Application.Json)
                 setBody(
                     """{
                               "content": {
@@ -482,7 +506,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         suspend fun HttpClient.makeJoin() =
             put("/_matrix/federation/v2/send_join/publicRoom:myServer.com/1234") {
                 header(
-                    HttpHeaders.Authorization,
+                    Authorization,
                     """X-Matrix origin="fed",destination="myServer:80",key="ed25519:ABC",sig="signature""""
                 )
             }
@@ -497,7 +521,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                     )
                 )
                 val response = client.sendJoin("publicRoom")
-                response.status shouldBe HttpStatusCode.Forbidden
+                response.status shouldBe Forbidden
                 response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"Cannot join public rooms owned by other home servers"}"""
             }
         }
@@ -512,7 +536,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                     )
                 )
                 val response = client.sendJoin("privateRoom")
-                response.status shouldBe HttpStatusCode.OK
+                response.status shouldBe OK
             }
         }
 
@@ -526,7 +550,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                     )
                 )
                 val response = client.makeJoin()
-                response.status shouldBe HttpStatusCode.Forbidden
+                response.status shouldBe Forbidden
                 response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"Cannot join public rooms owned by other home servers"}"""
             }
         }

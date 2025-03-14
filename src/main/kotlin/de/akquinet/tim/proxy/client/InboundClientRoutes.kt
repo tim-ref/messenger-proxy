@@ -34,6 +34,7 @@ import de.akquinet.tim.proxy.client.model.route.pushrules.GetPushRulesForScope
 import de.akquinet.tim.proxy.client.model.route.thirdparty.GetLocationFromThirdParty
 import de.akquinet.tim.proxy.client.model.route.thirdparty.GetThirdPartyProtocolByName
 import de.akquinet.tim.proxy.client.model.route.thirdparty.GetUserFromThirdParty
+import de.akquinet.tim.proxy.federation.unfederatedDomainException
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.model.Operation
 import io.ktor.client.*
@@ -115,12 +116,22 @@ class InboundClientRoutesImpl(
                         "${regServiceConfig.wellKnownSupportEndpoint}/$serverName"
             )
 
-            kLog.info { "Forward request on ${call.request.path()} to $url"  }
+            kLog.info { "Forward request on ${call.request.path()} to $url" }
 
-            forwardRequest(
+            forwardRequestWithDefaultResponse(
                 call = call,
                 httpClient = httpClient,
                 destinationUrl = url,
+                defaultResponseText = """{
+  "contacts": [
+    {
+      "email_address": "Referenzimplementierung",
+      "matrix_id": "Referenzimplementierung",
+      "role": "Referenzimplementierung"
+    }
+  ],
+  "support_page": "Referenzimplementierung"
+}""",
                 bodyJson = call.receive()
             )
         }
@@ -224,11 +235,12 @@ class InboundClientRoutesImpl(
             val relevantDomains = userId?.let {
                 setOf(it.domain, inviter.userId.domain)
             } ?: setOf(inviter.userId.domain)
-            if (config.enforceDomainList && !berechtigungsstufeEinsService.areDomainsFederated(relevantDomains)) {
-                throw MatrixServerException(
-                    statusCode = HttpStatusCode.Forbidden,
-                    errorResponse = ErrorResponse.Forbidden("${userId ?: "unbekannter Benutzer"} konnte nicht eingeladen werden. Die Föderationsliste enthält nicht alle Domains: ${relevantDomains.joinToString()}.")
-                )
+            if (config.enforceDomainList) {
+                for (domain in relevantDomains) {
+                    if (berechtigungsstufeEinsService.isUnfederatedDomain(domain)) {
+                        throw unfederatedDomainException(domain)
+                    }
+                }
             }
 
             forwardRequest(
@@ -316,17 +328,13 @@ class InboundClientRoutesImpl(
                     "Required value InviteUser.Request.userId is null"
                 }
 
-            if (config.enforceDomainList && !berechtigungsstufeEinsService.areDomainsFederated(
-                    setOf(
-                        invited.domain,
-                        inviter.userId.domain
-                    )
-                )
-            ) {
-                throw MatrixServerException(
-                    statusCode = HttpStatusCode.Forbidden,
-                    errorResponse = ErrorResponse.Forbidden("$invited konnte nicht eingeladen werden")
-                )
+            if (config.enforceDomainList) {
+                if (berechtigungsstufeEinsService.isUnfederatedDomain(invited.domain)) {
+                    throw unfederatedDomainException(invited.domain)
+                }
+                if (berechtigungsstufeEinsService.isUnfederatedDomain(inviter.userId.domain)) {
+                    throw unfederatedDomainException(inviter.userId.domain)
+                }
             }
 
             forwardRequest(

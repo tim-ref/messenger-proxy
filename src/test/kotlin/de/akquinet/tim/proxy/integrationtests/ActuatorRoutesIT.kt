@@ -178,12 +178,13 @@ class ActuatorRoutesIT {
                     regServiceConfig = regServerConfig
                 ),
                 inboundFederationRoutes = InboundFederationRoutesImpl(
-                    inboundProxyConfig,
-                    httpClient,
-                    rawDataServiceStub,
-                    contactManagementServiceMock,
-                    vzdPublicIDCheckMock,
-                    timAuthorizationCheckConfiguration
+                    config = inboundProxyConfig,
+                    httpClient = httpClient,
+                    rawDataService = rawDataServiceStub,
+                    contactManagementService = contactManagementServiceMock,
+                    vzdPublicIDCheck = vzdPublicIDCheckMock,
+                    timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
+                    berechtigungsstufeEinsService = bsEinsService,
                 ),
                 httpClient = httpClient,
                 berechtigungsstufeEinsService = bsEinsService

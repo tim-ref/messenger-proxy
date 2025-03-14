@@ -16,11 +16,10 @@
 
 package de.akquinet.tim.proxy.client
 
-import de.akquinet.tim.ErrorResponse
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.federation.FederationList
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
-import de.akquinet.tim.shouldEqualJsonMatrixStandard
+import io.kotest.assertions.json.shouldEqualJson
 import io.kotest.assertions.ktor.client.shouldHaveContentType
 import io.kotest.assertions.ktor.client.shouldHaveStatus
 import io.kotest.core.spec.style.ShouldSpec
@@ -29,7 +28,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.http.ContentType.Application
-import io.ktor.http.HttpStatusCode.Companion.BadRequest
+import io.ktor.http.HttpStatusCode.Companion.Forbidden
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.plugins.contentnegotiation.*
@@ -65,18 +64,22 @@ class PathParameterFederationCheckTest : ShouldSpec({
         }
     }
 
+    // A_25534 - Fehlschlag Föderationsprüfung
+    // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_25534
     should("reject requests for media from unfederated servers") {
         testApplication {
             application { testModule() }
 
             val response = client.get("/unfederated")
 
-            response shouldHaveStatus BadRequest
+            response shouldHaveStatus Forbidden
             response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
-            response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
-                errcode = "M_SERVER_NOT_TRUSTED",
-                error = "Server 'unfederated' is not part of federation."
-            )
+            response.bodyAsText() shouldEqualJson """
+                    { 
+                      "errcode": "M_FORBIDDEN",  
+                      "error": "unfederated kann nicht in der Föderation gefunden werden"  
+                    }
+                """
         }
     }
 

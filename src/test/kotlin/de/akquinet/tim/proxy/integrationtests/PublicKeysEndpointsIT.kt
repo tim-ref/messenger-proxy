@@ -49,7 +49,8 @@ class PublicKeysEndpointsIT : DescribeSpec({
             rawDataService = RawDataServiceStub(),
             contactManagementService = mockk(),
             vzdPublicIDCheck = mockk(),
-            timAuthorizationCheckConfiguration = mockk()
+            timAuthorizationCheckConfiguration = mockk(),
+            berechtigungsstufeEinsService = mockk(),
         )
 
         it("should answer /_matrix/key/v2/server/{keyId}") {

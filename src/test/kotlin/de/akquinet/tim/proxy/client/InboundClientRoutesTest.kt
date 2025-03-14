@@ -24,6 +24,7 @@ import de.akquinet.tim.proxy.federation.FederationList
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.util.customMatrixServer
+import io.kotest.assertions.json.shouldEqualJson
 import io.kotest.assertions.ktor.client.shouldHaveStatus
 import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
@@ -32,7 +33,7 @@ import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
-import io.ktor.http.HttpStatusCode.Companion.BadRequest
+import io.ktor.http.HttpStatusCode.Companion.Forbidden
 import io.ktor.http.HttpStatusCode.Companion.NotFound
 import io.ktor.http.HttpStatusCode.Companion.OK
 import io.ktor.serialization.kotlinx.json.*
@@ -124,6 +125,10 @@ class InboundClientRoutesTest : ShouldSpec({
 
     context("media routes") {
 
+        // A_26328 - Prüfung eingehender Medienanfragen
+        // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_26328
+        // A_25534 - Fehlschlag Föderationsprüfung
+        // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_25534
         should("reject requests for media on unfederated servers") {
             testApplication {
                 val client = createClient { install(ContentNegotiation) { json() } }
@@ -131,8 +136,13 @@ class InboundClientRoutesTest : ShouldSpec({
 
                 val response = client.get("/_matrix/media/v3/download/unfederatedServer/1")
 
-                response shouldHaveStatus BadRequest
-                response.bodyAsText() shouldContain "unfederatedServer"
+                response shouldHaveStatus Forbidden
+                response.bodyAsText() shouldEqualJson """
+                    { 
+                      "errcode": "M_FORBIDDEN",  
+                      "error": "unfederatedServer kann nicht in der Föderation gefunden werden"  
+                    }
+                """
             }
         }
 
@@ -184,7 +194,7 @@ class InboundClientRoutesTest : ShouldSpec({
             }
         }
 
-        should("respond NotFound if no data for the server is available"){
+        should("respond with default if no data for the server is available") {
             testApplication {
                 val client = createClient { install(ContentNegotiation) { json() } }
                 application { testModule(client) }
@@ -200,7 +210,17 @@ class InboundClientRoutesTest : ShouldSpec({
 
                 val response = client.get("/.well-known/matrix/support")
 
-                response shouldHaveStatus NotFound
+                response shouldHaveStatus OK
+                response.bodyAsText() shouldContain """{
+  "contacts": [
+    {
+      "email_address": "Referenzimplementierung",
+      "matrix_id": "Referenzimplementierung",
+      "role": "Referenzimplementierung"
+    }
+  ],
+  "support_page": "Referenzimplementierung"
+}"""
             }
         }
     }

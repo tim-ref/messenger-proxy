@@ -17,11 +17,11 @@
 package de.akquinet.tim.proxy.client
 
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
-import io.ktor.http.HttpStatusCode.Companion.BadRequest
+import de.akquinet.tim.proxy.federation.unfederatedDomainResponse
+import io.ktor.http.HttpStatusCode.Companion.Forbidden
 import io.ktor.server.application.*
 import io.ktor.server.response.*
 import kotlinx.serialization.json.Json
-import net.folivo.trixnity.core.ErrorResponse.ServerNotTrusted
 import net.folivo.trixnity.core.ErrorResponseSerializer
 
 /**
@@ -34,11 +34,11 @@ val PathParameterFederationCheck = createRouteScopedPlugin(
     pluginConfig.apply {
         onCall { call ->
             val serverName = call.parameters[pathParameterName] ?: "server name not found"
-            val isServerFederated = service.areDomainsFederated(setOf(serverName))
-            if (!isServerFederated) {
-                val matrixError = ServerNotTrusted("Server '$serverName' is not part of federation.")
-                val body = json.encodeToJsonElement(ErrorResponseSerializer, matrixError)
-                call.respond(BadRequest, body)
+            val isUnfederatedDomain = service.isUnfederatedDomain(serverName)
+            if (isUnfederatedDomain) {
+                val response = unfederatedDomainResponse(serverName)
+                val body = json.encodeToJsonElement(ErrorResponseSerializer, response)
+                call.respond(Forbidden, body)
             }
         }
     }

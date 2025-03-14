@@ -62,10 +62,10 @@ class BerechtigungsstufeEinsAuthenticationProvider internal constructor(
         val cause = if (origin == null) {
             NoCredentials
         } else {
-            if (berechtigungsstufeEinsService.areDomainsFederated(setOf(origin))) {
-                null
-            } else {
+            if (berechtigungsstufeEinsService.isUnfederatedDomain(origin)) {
                 InvalidCredentials
+            } else {
+                null
             }
         }
 

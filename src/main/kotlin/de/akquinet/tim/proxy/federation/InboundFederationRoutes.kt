@@ -16,6 +16,7 @@
 package de.akquinet.tim.proxy.federation
 
 import de.akquinet.tim.proxy.*
+import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
 import de.akquinet.tim.proxy.extensions.toUriFormat
 import de.akquinet.tim.proxy.federation.model.route.InviteV1
@@ -55,7 +56,8 @@ class InboundFederationRoutesImpl(
     private val rawDataService: RawDataService,
     private val contactManagementService: ContactManagementService,
     private val vzdPublicIDCheck: VZDPublicIDCheck,
-    private val timAuthorizationCheckConfiguration: ProxyConfiguration.TimAuthorizationCheckConfiguration
+    private val timAuthorizationCheckConfiguration: ProxyConfiguration.TimAuthorizationCheckConfiguration,
+    private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService,
 ) : InboundFederationRoutes, FederationRoutesImpl(httpClient) {
     override fun ApplicationRequest.getDestinationUrl(): Url = uri.mergeToUrl(config.homeserverUrl)
 
@@ -72,6 +74,7 @@ class InboundFederationRoutesImpl(
         // TODO https://jira.spree.de/browse/TIMREF-1772: a better alternativ to turning off the feature completely would be to start a Nginx Server that mocks
         // the interface "/vzd/invite" of the registration service
 
+        // FixMe TIMREF-2269 Föderationsprüfung muss auch bei client-seitiger Berechtigungsprüfung durchgeführt werden.
         // AFO_25046 enforce invite permission check on client
         if (!config.enforceDomainList || timAuthorizationCheckConfiguration.concept == TimAuthorizationCheckConcept.CLIENT) {
             val reasonToPass = if (!config.enforceDomainList) "sytest is running" else "concept is CLIENT"
@@ -108,14 +111,17 @@ class InboundFederationRoutesImpl(
 
         val response = httpClient.get("${config.homeserverUrl}/_matrix/client/v3/publicRooms")
 
-        if (response.status == HttpStatusCode.OK){
+        if (response.status == HttpStatusCode.OK) {
             val body = Json {
                 ignoreUnknownKeys = true
             }.decodeFromString<GetPublicRoomsResponse>(response.bodyAsText())
 
             val toJoinedRoom = body.chunk.find { c -> c.roomId == roomId }
             if (toJoinedRoom?.joinRule == JoinRulesEventContent.JoinRule.Public) {
-                throw MatrixServerException(HttpStatusCode.Forbidden, ErrorResponse.Forbidden("Cannot join public rooms owned by other home servers"))
+                throw MatrixServerException(
+                    HttpStatusCode.Forbidden,
+                    ErrorResponse.Forbidden("Cannot join public rooms owned by other home servers")
+                )
             }
         }
 
@@ -129,6 +135,10 @@ class InboundFederationRoutesImpl(
         val inviter = eventJson["sender"]?.jsonPrimitive?.content?.let(::UserId)
         val invited = eventJson["state_key"]?.jsonPrimitive?.content?.let(::UserId)
         val membership = eventJson["content"]?.jsonObject?.get("membership")?.jsonPrimitive?.content
+
+        if (config.enforceDomainList && invited != null &&
+            berechtigungsstufeEinsService.isUnfederatedDomain(invited.domain)
+        ) throw unfederatedDomainException(invited.domain)
 
         if (membership == "invite" && isInviteAllowed(inviter, invited)) {
             forwardRequest(

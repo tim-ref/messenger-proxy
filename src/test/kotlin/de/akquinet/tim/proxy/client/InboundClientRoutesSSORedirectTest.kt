@@ -100,54 +100,105 @@ class InboundClientRoutesSSORedirectTest : ShouldSpec({
         }
     }
 
-    should("relay requests after SSO login (query parameter)") {
-        testApplication {
-            val client = createClient { followRedirects = false }
-            application { testModule(client) }
-            homeserverWithRouting {
-                get("/_matrix/client/v3/login/sso/redirect") {
-                    val redirectUrl = call.parameters["redirectUrl"]
-                    if (redirectUrl != null) {
-                        call.respondRedirect(redirectUrl)
-                    } else {
-                        call.respond(BadRequest)
+    context("relay requests after SSO login") {
+        should("forward correct request") {
+            testApplication {
+                val client = createClient { followRedirects = false }
+                application { testModule(client) }
+                homeserverWithRouting {
+                    get("/_matrix/client/v3/login/sso/redirect") {
+                        val redirectUrl = call.request.queryParameters["redirectUrl"]
+                        if (redirectUrl != null) {
+                            call.respondRedirect(redirectUrl)
+                        } else {
+                            call.respond(BadRequest)
+                        }
                     }
                 }
-            }
 
-            val response = client.get("/_matrix/client/v3/login/sso/redirect") {
-                url { parameters.append("redirectUrl", "https://www.gematik.de") }
-            }
+                val response =
+                    client.get("/_matrix/client/v3/login/sso/redirect") {
+                        url { parameters.append("redirectUrl", "https://www.gematik.de") }
+                    }
 
-            assertSoftly {
-                response shouldHaveStatus Found
-                response.shouldHaveHeader("Location", "https://www.gematik.de")
+                assertSoftly {
+                    response shouldHaveStatus Found
+                    response.shouldHaveHeader("Location", "https://www.gematik.de")
+                }
+            }
+        }
+
+        should("forward request with missing redirectUrl") {
+            testApplication {
+                val client = createClient { followRedirects = false }
+                application { testModule(client) }
+                homeserverWithRouting {
+                    get("/_matrix/client/v3/login/sso/redirect") {
+                        val redirectUrl = call.request.queryParameters["redirectUrl"]
+                        if (redirectUrl != null) {
+                            call.respondRedirect(redirectUrl)
+                        } else {
+                            call.respond(BadRequest)
+                        }
+                    }
+                }
+
+                val response = client.get("/_matrix/client/v3/login/sso/redirect")
+
+                response shouldHaveStatus BadRequest
             }
         }
     }
 
-    xshould("relay requests after SSO login (path parameter)") {
-        testApplication {
-            val client = createClient { followRedirects = false }
-            application { testModule(client) }
-            homeserverWithRouting {
-                get("/_matrix/client/v3/login/sso/redirect/{idpId}") {
-                    val redirectUrl = call.parameters["idpId"]
-                    if (redirectUrl != null) {
-                        call.respondRedirect(redirectUrl)
-                    } else {
-                        call.respond(BadRequest)
+    context("relay requests after SSO login with path parameter") {
+        should("forward correct request") {
+            testApplication {
+                val client = createClient { followRedirects = false }
+                application { testModule(client) }
+                homeserverWithRouting {
+                    get("/_matrix/client/v3/login/sso/redirect/{idpId}") {
+                        val redirectUrl = call.request.queryParameters["redirectUrl"]
+                        if (redirectUrl != null) {
+                            call.respondRedirect(redirectUrl)
+                        } else {
+                            call.respond(BadRequest)
+                        }
                     }
                 }
+
+                val response =
+                    client.get("/_matrix/client/v3/login/sso/redirect/someIdpId") {
+                        url { parameters.append("redirectUrl", "https://www.gematik.de") }
+                    }
+
+                assertSoftly {
+                    response shouldHaveStatus Found
+                    response.shouldHaveHeader("Location", "https://www.gematik.de")
+                }
             }
+        }
 
-            val response = client.get("/_matrix/client/v3/login/sso/redirect/https%3A%2F%2Fwww.gematik.de")
+        // this previously answered NOT_FOUND because
+        // "redirectUrl" was non-nullable in the definition of "SSORedirectTo.kt"
+        should("forward request with missing redirectUrl") {
+            testApplication {
+                val client = createClient { followRedirects = false }
+                application { testModule(client) }
+                homeserverWithRouting {
+                    get("/_matrix/client/v3/login/sso/redirect/{idpId}") {
+                        val redirectUrl = call.request.queryParameters["redirectUrl"]
+                        if (redirectUrl != null) {
+                            call.respondRedirect(redirectUrl)
+                        } else {
+                            call.respond(BadRequest)
+                        }
+                    }
+                }
 
-            assertSoftly {
-                response shouldHaveStatus Found
-                response.shouldHaveHeader("Location", "https://www.gematik.de")
+                val response = client.get("/_matrix/client/v3/login/sso/redirect/someIdpId")
+
+                response shouldHaveStatus BadRequest
             }
         }
     }
-
 })
