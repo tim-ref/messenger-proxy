@@ -144,8 +144,11 @@ class InboundClientRoutesImpl(
             }
 
             forwardEndpointWithoutCallReceival<DownloadMedia>()
+            forwardEndpointWithoutCallReceival<DownloadMediaWithFilename>()
             @Suppress("DEPRECATION")
             forwardEndpointWithoutCallReceival<DownloadMediaLegacy>()
+            @Suppress("DEPRECATION")
+            forwardEndpointWithoutCallReceival<DownloadMediaWithFilenameLegacy>()
             @Suppress("DEPRECATION")
             forwardEndpoint<DownloadThumbnailLegacy>()
             forwardEndpoint<DownloadThumbnail>()
@@ -237,9 +240,7 @@ class InboundClientRoutesImpl(
             } ?: setOf(inviter.userId.domain)
             if (config.enforceDomainList) {
                 for (domain in relevantDomains) {
-                    if (berechtigungsstufeEinsService.isUnfederatedDomain(domain)) {
-                        throw unfederatedDomainException(domain)
-                    }
+                    checkFederatedDomain(domain)
                 }
             }
 
@@ -329,12 +330,8 @@ class InboundClientRoutesImpl(
                 }
 
             if (config.enforceDomainList) {
-                if (berechtigungsstufeEinsService.isUnfederatedDomain(invited.domain)) {
-                    throw unfederatedDomainException(invited.domain)
-                }
-                if (berechtigungsstufeEinsService.isUnfederatedDomain(inviter.userId.domain)) {
-                    throw unfederatedDomainException(inviter.userId.domain)
-                }
+                checkFederatedDomain(invited.domain)
+                checkFederatedDomain(inviter.userId.domain)
             }
 
             forwardRequest(
@@ -352,6 +349,12 @@ class InboundClientRoutesImpl(
                     sizeOut = it.fourth
                 )
             }
+        }
+    }
+
+    private fun checkFederatedDomain(domain: String) {
+        if (berechtigungsstufeEinsService.isUnfederatedDomain(domain)) {
+            throw unfederatedDomainException(domain)
         }
     }
 
@@ -424,8 +427,6 @@ class InboundClientRoutesImpl(
     private fun Route.mediaRoutes() {
         forwardEndpoint<GetMediaConfig>()
         forwardEndpointWithoutCallReceival<UploadMedia>()
-        forwardEndpoint<GetUrlPreview>()
-        forwardEndpoint<GetUrlPreviewLegacy>()
     }
 
     private fun Route.pushRoutes() {

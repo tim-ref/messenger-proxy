@@ -19,6 +19,7 @@ import de.akquinet.tim.proxy.*
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
 import de.akquinet.tim.proxy.extensions.toUriFormat
+import de.akquinet.tim.proxy.federation.model.route.InviteRequestBodyCommon
 import de.akquinet.tim.proxy.federation.model.route.InviteV1
 import de.akquinet.tim.proxy.federation.model.route.SendJoinV1
 import de.akquinet.tim.proxy.rawdata.RawDataService
@@ -32,9 +33,6 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import mu.KotlinLogging
 import net.folivo.trixnity.api.server.matrixEndpointResource
 import net.folivo.trixnity.core.ErrorResponse
@@ -59,6 +57,11 @@ class InboundFederationRoutesImpl(
     private val timAuthorizationCheckConfiguration: ProxyConfiguration.TimAuthorizationCheckConfiguration,
     private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService,
 ) : InboundFederationRoutes, FederationRoutesImpl(httpClient) {
+
+    private val tolerantJson = Json {
+        ignoreUnknownKeys = true
+    }
+
     override fun ApplicationRequest.getDestinationUrl(): Url = uri.mergeToUrl(config.homeserverUrl)
 
     override fun Route.serverServerRawDataRoutes() {
@@ -73,21 +76,18 @@ class InboundFederationRoutesImpl(
         // enforceDomainList is used to turn off the invitation check mechanism ("Berechtigungsprüfung Stufe 3") for Sytest
         // TODO https://jira.spree.de/browse/TIMREF-1772: a better alternativ to turning off the feature completely would be to start a Nginx Server that mocks
         // the interface "/vzd/invite" of the registration service
-
-        // FixMe TIMREF-2269 Föderationsprüfung muss auch bei client-seitiger Berechtigungsprüfung durchgeführt werden.
-        // AFO_25046 enforce invite permission check on client
-        if (!config.enforceDomainList || timAuthorizationCheckConfiguration.concept == TimAuthorizationCheckConcept.CLIENT) {
-            val reasonToPass = if (!config.enforceDomainList) "sytest is running" else "concept is CLIENT"
-            kLog.info("Pass invite permission check, cause $reasonToPass")
-
+        if (!config.enforceDomainList) {
+            kLog.info("Pass invite permission check, cause sytest is running")
             forwardWithRawData<Invite>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER)
             forwardWithRawData<InviteV1>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER)
         } else {
+            // AFO_25046 enforce invite permission check on client
+            val doBerechtigungscheck = timAuthorizationCheckConfiguration.concept == TimAuthorizationCheckConcept.PROXY
             matrixEndpointResource<Invite> {
-                handleInvite(call)
+                handleInvite(call, checkBerechtigungsstufe23 = doBerechtigungscheck)
             }
             matrixEndpointResource<InviteV1> {
-                handleInvite(call)
+                handleInvite(call, checkBerechtigungsstufe23 = doBerechtigungscheck)
             }
         }
 
@@ -112,9 +112,7 @@ class InboundFederationRoutesImpl(
         val response = httpClient.get("${config.homeserverUrl}/_matrix/client/v3/publicRooms")
 
         if (response.status == HttpStatusCode.OK) {
-            val body = Json {
-                ignoreUnknownKeys = true
-            }.decodeFromString<GetPublicRoomsResponse>(response.bodyAsText())
+            val body = tolerantJson.decodeFromString<GetPublicRoomsResponse>(response.bodyAsText())
 
             val toJoinedRoom = body.chunk.find { c -> c.roomId == roomId }
             if (toJoinedRoom?.joinRule == JoinRulesEventContent.JoinRule.Public) {
@@ -128,40 +126,57 @@ class InboundFederationRoutesImpl(
         forwardRequest(call, httpClient, call.request.getDestinationUrl(), null)
     }
 
-    private suspend fun handleInvite(call: ApplicationCall) {
-        val requestBody = call.receive<JsonObject>()
-        val eventJson = requestBody["event"]?.jsonObject
-        checkNotNull(eventJson)
-        val inviter = eventJson["sender"]?.jsonPrimitive?.content?.let(::UserId)
-        val invited = eventJson["state_key"]?.jsonPrimitive?.content?.let(::UserId)
-        val membership = eventJson["content"]?.jsonObject?.get("membership")?.jsonPrimitive?.content
+    private suspend fun handleInvite(call: ApplicationCall, checkBerechtigungsstufe23: Boolean) {
+        val requestBody = call.receiveText()
+        val request = tolerantJson.decodeFromString<InviteRequestBodyCommon>(requestBody)
+        val (sender, invitedUser, content) = request.event
+        val membership = content.membership
 
-        if (config.enforceDomainList && invited != null &&
-            berechtigungsstufeEinsService.isUnfederatedDomain(invited.domain)
-        ) throw unfederatedDomainException(invited.domain)
+        if (config.enforceDomainList) {
+            checkFederatedDomain(invitedUser.domain)
+            checkFederatedDomain(sender.domain)
+        }
 
-        if (membership == "invite" && isInviteAllowed(inviter, invited)) {
+        suspend fun forwardRequest() {
             forwardRequest(
-                call, httpClient, call.request.getDestinationUrl(), requestBody.toString().toByteArray()
+                call, httpClient, call.request.getDestinationUrl(), requestBody.toByteArray()
             ).let {
                 rawDataService.serverRawDataForward(
-                    it.first, it.second, it.third, Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER, it.fourth
+                    request = it.first,
+                    response = it.second,
+                    duration = it.third,
+                    timOperation = Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER,
+                    sizeOut = it.fourth
+                )
+            }
+        }
+
+        if (checkBerechtigungsstufe23) {
+            if (membership == "invite" && isInviteAllowed(sender, invitedUser)) {
+                forwardRequest()
+            } else {
+                throw MatrixServerException(
+                    HttpStatusCode.Forbidden,
+                    ErrorResponse.Forbidden("can not invite this user")
                 )
             }
         } else {
-            throw MatrixServerException(HttpStatusCode.Forbidden, ErrorResponse.Forbidden("can not invite this user"))
+            forwardRequest()
+        }
+    }
+
+    private fun checkFederatedDomain(domain: String) {
+        if (berechtigungsstufeEinsService.isUnfederatedDomain(domain)) {
+            throw unfederatedDomainException(domain)
         }
     }
 
     //  Berechtigungsstufe 2 & 3
-    private suspend fun isInviteAllowed(inviter: UserId?, invitedUser: UserId?): Boolean {
-        if (inviter != null && invitedUser != null && (contactManagementService.getContact(
-                invitedUser.full, inviter.full
-            ) != null)
-        ) {
+    private suspend fun isInviteAllowed(inviter: UserId, invitedUser: UserId): Boolean {
+        if (contactManagementService.getContact(invitedUser.full, inviter.full) != null) {
             return true
         }
-        return (inviter != null) && (invitedUser != null) && vzdPublicIDCheck.areMXIDsPublic(
+        return vzdPublicIDCheck.areMXIDsPublic(
             invited = invitedUser.toUriFormat().full, inviter = inviter.toUriFormat().full
         )
     }

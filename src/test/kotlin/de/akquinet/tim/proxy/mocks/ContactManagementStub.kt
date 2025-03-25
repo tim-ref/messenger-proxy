@@ -29,7 +29,15 @@ class ContactManagementStub : ContactManagementService {
         return if (ownerMxid == "1234")
             emptyList()
         else
-            listOf(ContactEntity(id = UUID.fromString("8f0874ee-8db6-4056-baf8-eeaa1c23aed0"), ownerId = "owner4", approvedId = "12345", displayName = "Alice", inviteStart = 17))
+            listOf(
+                ContactEntity(
+                    id = UUID.fromString("8f0874ee-8db6-4056-baf8-eeaa1c23aed0"),
+                    ownerId = "owner4",
+                    approvedId = "12345",
+                    displayName = "Alice",
+                    inviteStart = 17
+                )
+            )
     }
 
     override suspend fun addContactTo(ownerMxid: String, contactEntity: ContactEntity): ContactEntity? {
@@ -43,9 +51,25 @@ class ContactManagementStub : ContactManagementService {
     }
 
     override suspend fun getContact(ownerMxid: String, approvedMxid: String): ContactEntity? {
-        return if (approvedMxid == "4444")
-            ContactEntity(id = UUID.fromString("8f0874ee-8db6-4056-baf8-eeaa1c23aed0"), ownerId = "1234", approvedId = "4444", displayName = "Alice", inviteStart = 17)
-        else null
+        return when (approvedMxid) {
+            "4444" -> ContactEntity(
+                id = UUID.fromString("8f0874ee-8db6-4056-baf8-eeaa1c23aed0"),
+                ownerId = "1234",
+                approvedId = "4444",
+                displayName = "Alice",
+                inviteStart = 17
+            )
+
+            "@4444:fed" -> ContactEntity(
+                id = UUID.fromString("8f0874ee-8db6-4056-baf8-eeaa1c23aed0"),
+                ownerId = "1234",
+                approvedId = "@4444:fed",
+                displayName = "Alice",
+                inviteStart = 17
+            )
+
+            else -> null
+        }
     }
 
     override suspend fun hasContactValidInviteSettings(

@@ -34,21 +34,16 @@
 
 package de.akquinet.tim.proxy.util
 
-import io.ktor.http.HttpStatusCode
-import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.application.Application
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.application.install
-import io.ktor.server.application.log
-import io.ktor.server.plugins.BadRequestException
-import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.server.plugins.statuspages.StatusPages
-import io.ktor.server.plugins.statuspages.StatusPagesConfig
-import io.ktor.server.resources.Resources
-import io.ktor.server.response.respond
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.routing
-import io.ktor.util.logging.error
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
+import io.ktor.server.plugins.*
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.statuspages.*
+import io.ktor.server.resources.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.ktor.util.logging.*
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import net.folivo.trixnity.core.ErrorResponse
@@ -122,13 +117,19 @@ private fun StatusPagesConfig.notFound(json: Json) {
     }
 }
 
+/**
+ * Similarly, a 405 M_UNRECOGNIZED error is used to denote an unsupported
+ * method to a known endpoint.
+ *
+ * See https://spec.matrix.org/v1.11/server-server-api/#unsupported-endpoints
+ */
 private fun StatusPagesConfig.methodNotAllowed(json: Json) {
     status(HttpStatusCode.MethodNotAllowed) { call, _ ->
         call.respond(
             HttpStatusCode.MethodNotAllowed,
             json.encodeToJsonElement(
                 ErrorResponseSerializer,
-                ErrorResponse.Unrecognized("http request method not allowed")
+                ErrorResponse.Unrecognized("This endpoint is implemented, but the method is not supported.")
             )
         )
     }

@@ -13,19 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.akquinet.tim.proxy.client.model.route.account_data
+package de.akquinet.tim.proxy.federation.model.route
 
-import de.akquinet.tim.proxy.ProxyConfiguration
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import net.folivo.trixnity.core.model.UserId
 
 /**
- * [A_25258](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.0.0/#A_25258)
- * [JSON schema](https://github.com/gematik/api-ti-messenger/blob/main/src/schema/permissionConfig.json)
+ * Slice of [net.folivo.trixnity.serverserverapi.model.federation.Invite] and [InviteV1] used for different checks.
  */
 @Serializable
-data class PermissionConfig(
-    val defaultSetting: DefaultSetting,
+data class InviteRequestBodyCommon(val event: InviteEventCommon)
+
+@Serializable
+data class InviteEventCommon(
+    val sender: UserId,
+    @SerialName("state_key") val stateKey: UserId,
+    val content: MembershipEventContentCommon
 )
 
-fun ProxyConfiguration.TimAuthorizationCheckConfiguration.asPermissionConfig() =
-    PermissionConfig(this.inviteRejectionPolicy.asDefaultSetting())
+@Serializable
+data class MembershipEventContentCommon(val membership: String)

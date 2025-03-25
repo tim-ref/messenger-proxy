@@ -15,9 +15,7 @@
  */
 package de.akquinet.tim.proxy.federation
 
-import de.akquinet.tim.proxy.client.model.route.DownloadMediaV1
-import de.akquinet.tim.proxy.client.model.route.DownloadThumbnailV1
-import de.akquinet.tim.proxy.client.model.route.GetServerKeyById
+import de.akquinet.tim.proxy.client.model.route.*
 import de.akquinet.tim.proxy.federation.model.route.*
 import de.akquinet.tim.proxy.forwardRequest
 import de.akquinet.tim.proxy.forwardRequestWithoutCallReceival
@@ -30,7 +28,6 @@ import net.folivo.trixnity.api.server.matrixEndpointResource
 import net.folivo.trixnity.clientserverapi.model.media.DownloadMediaLegacy
 import net.folivo.trixnity.clientserverapi.model.media.DownloadThumbnailLegacy
 import net.folivo.trixnity.clientserverapi.model.media.GetMediaConfig
-import net.folivo.trixnity.clientserverapi.model.media.GetMediaConfigLegacy
 import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.serverserverapi.model.discovery.GetServerKeys
 import net.folivo.trixnity.serverserverapi.model.discovery.QueryServerKeys
@@ -75,11 +72,16 @@ abstract class FederationRoutesImpl(
 
         // media
         forwardEndpointWithoutCallReceival<DownloadMedia>()
+        forwardEndpointWithoutCallReceival<DownloadMediaWithFilename>()
+        @Suppress("DEPRECATION")
         forwardEndpointWithoutCallReceival<DownloadMediaLegacy>()
+        @Suppress("DEPRECATION")
+        forwardEndpointWithoutCallReceival<DownloadMediaWithFilenameLegacy>()
         forwardEndpointWithoutCallReceival<DownloadMediaR0>()
         // media V1 --> A_26262
         forwardEndpointWithoutCallReceival<DownloadMediaV1>()
         forwardEndpoint<DownloadThumbnail>()
+        @Suppress("DEPRECATION")
         forwardEndpoint<DownloadThumbnailLegacy>()
         forwardEndpoint<DownloadThumbnailR0>()
 
@@ -87,7 +89,6 @@ abstract class FederationRoutesImpl(
 
 
         forwardEndpoint<GetMediaConfig>()
-        forwardEndpoint<GetMediaConfigLegacy>()
         // cas
         forwardEndpoint<CasProxyValidate>()
 

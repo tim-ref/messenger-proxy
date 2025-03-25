@@ -29,18 +29,15 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
-import io.ktor.server.plugins.cors.routing.*
+import io.ktor.server.plugins.callloging.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import mu.KotlinLogging
-import net.folivo.trixnity.clientserverapi.server.ConvertMediaPlugin
 import net.folivo.trixnity.clientserverapi.server.matrixAccessTokenAuth
 import net.folivo.trixnity.core.ErrorResponse
 import net.folivo.trixnity.core.MatrixServerException
 import net.folivo.trixnity.core.serialization.createMatrixEventJson
-
-private val kLog = KotlinLogging.logger { }
+import org.slf4j.event.Level
 
 interface InboundProxy {
     suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit = {}): ApplicationEngine
@@ -60,6 +57,18 @@ class InboundProxyImpl(
                 port = this@InboundProxyImpl.inboundProxyConfiguration.port
             }
             module {
+                install(CallLogging) {
+                    filter { call -> call.response.status() == HttpStatusCode.NotFound }
+                    level = Level.WARN
+                    format { call ->
+                        val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }
+                        val uri = call.request.uri
+                        val method = call.request.httpMethod.value
+
+                        "inbound request on unhandled path $uri with method $method and headers $headerList"
+                    }
+                }
+
                 val json = createMatrixEventJson()
                 configureMatrixFederationCheckAuth()
 
@@ -122,20 +131,6 @@ class InboundProxyImpl(
                             call.respond(HttpStatusCode.OK)
                         }
                     }
-
-                    route("{...}") {
-                        customInstallMatrixClientServerApiServer()
-                        handle {
-                            val requestBody = call.receive<String>()
-                            val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }
-
-                            kLog.warn { "inbound request on unhandled path ${call.request.uri} with method ${call.request.httpMethod.value}, body $requestBody and headers $headerList" }
-                            throw MatrixServerException(
-                                HttpStatusCode.NotFound,
-                                ErrorResponse.NotFound("No resource was found for this request.")
-                            )
-                        }
-                    }
                 }
             }
             env()
@@ -153,25 +148,4 @@ class InboundProxyImpl(
         }
     }
 
-    // this function is copied from net.folivo.trixnity.clientserverapi.server.installMatrixClientServerApiServer
-    // and complemented by the allowance of the custom header "Useragent"
-    private fun Route.customInstallMatrixClientServerApiServer() {
-        // TODO implement rate limiting
-        install(ConvertMediaPlugin)
-        // see also https://spec.matrix.org/v1.6/client-server-api/#web-browser-clients
-        install(CORS) {
-            anyHost()
-            allowMethod(HttpMethod.Get)
-            allowMethod(HttpMethod.Post)
-            allowMethod(HttpMethod.Delete)
-            allowMethod(HttpMethod.Options)
-            allowMethod(HttpMethod.Put)
-            allowHeader(HttpHeaders.Authorization)
-            allowHeader(HttpHeaders.ContentType)
-            allowHeader("X-Requested-With")
-            // TODO this can be removed or changed because of future changes in the raw data specification
-            allowHeader("Useragent")
-            allowHeader("x-tim-user-agent")
-        }
-    }
 }

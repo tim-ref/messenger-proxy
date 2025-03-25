@@ -16,7 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.akquinet.tim.proxy.federation.model.route
+
+package de.akquinet.tim.proxy.client.model.route
 
 import io.ktor.http.*
 import io.ktor.resources.*
@@ -29,19 +30,20 @@ import net.folivo.trixnity.core.HttpMethodType.GET
 import net.folivo.trixnity.core.MatrixEndpoint
 
 /**
- * @see <a href="https://spec.matrix.org/legacy/client_server/r0.6.1.html#get-matrix-media-r0-download-servername-mediaid">matrix spec</a>
+ * @see <a href="https://spec.matrix.org/v1.11/client-server-api/#get_matrixclientv1mediadownloadservernamemediaidfilename">matrix spec</a>
  */
 @Serializable
-@Resource("/_matrix/media/r0/download/{serverName}/{mediaId}")
+@Resource("/_matrix/client/v1/media/download/{serverName}/{mediaId}/{fileName}")
 @HttpMethod(GET)
-data class DownloadMediaR0(
+data class DownloadMediaWithFilename(
     @SerialName("serverName") val serverName: String,
     @SerialName("mediaId") val mediaId: String,
-    @SerialName("allow_remote") val allowRemote: Boolean? = null
+    @SerialName("fileName") val fileName: String,
+    @SerialName("timeout_ms") val timeoutMs: Long? = null,
 ) : MatrixEndpoint<Unit, Media> {
 
     @Transient
-    override val requestContentType = ContentType.Application.Json
+    override val requestContentType = null
 
     @Transient
     override val responseContentType = ContentType.Application.OctetStream

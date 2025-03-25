@@ -16,52 +16,43 @@
 package de.akquinet.tim.proxy.integrationtests
 
 import de.akquinet.tim.ErrorResponse
-import de.akquinet.tim.proxy.InboundProxyImpl
-import de.akquinet.tim.proxy.InviteRejectionPolicy
-import de.akquinet.tim.proxy.ProxyConfiguration
-import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
+import de.akquinet.tim.jsonMatrixStandardErrorResponse
+import de.akquinet.tim.proxy.*
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
-import de.akquinet.tim.proxy.defaultConfig
 import de.akquinet.tim.proxy.federation.FederationList
 import de.akquinet.tim.proxy.federation.InboundFederationRoutesImpl
-import de.akquinet.tim.proxy.homeserverWithRouting
 import de.akquinet.tim.proxy.mocks.ContactManagementStub
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.RawDataServiceStub
 import de.akquinet.tim.proxy.mocks.VZDPublicIDCheckMock
-import de.akquinet.tim.proxy.proxyWithClientServerRoutes
 import de.akquinet.tim.shouldEqualJsonMatrixStandard
 import io.kotest.assertions.assertSoftly
+import io.kotest.assertions.json.shouldContainJsonKeyValue
 import io.kotest.assertions.json.shouldEqualJson
+import io.kotest.assertions.ktor.client.shouldHaveStatus
 import io.kotest.matchers.shouldBe
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logging
-import io.ktor.client.request.accept
-import io.ktor.client.request.get
-import io.ktor.client.request.headers
-import io.ktor.client.request.post
-import io.ktor.client.request.put
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
+import io.ktor.client.*
+import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.logging.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
 import io.ktor.http.ContentType.Application.Json
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode.Companion.BadRequest
 import io.ktor.http.HttpStatusCode.Companion.Forbidden
+import io.ktor.http.HttpStatusCode.Companion.MethodNotAllowed
 import io.ktor.http.HttpStatusCode.Companion.NotFound
 import io.ktor.http.HttpStatusCode.Companion.OK
-import io.ktor.http.contentType
-import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.application.call
-import io.ktor.server.engine.ApplicationEngine
-import io.ktor.server.response.respondText
-import io.ktor.server.routing.put
-import io.ktor.server.testing.testApplication
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
+import io.ktor.server.engine.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.ktor.server.testing.*
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -195,14 +186,31 @@ class InboundProxyIT {
 
     // These tests verify the changes made in the CustomMatrixServer.kt in comparison to the original MatrixApiServer.kt
     @Test
-    fun shouldReturnNotFoundOnNotExistentRoute() = runTest {
+    fun `should return NotFound on not-existent route`() = runTest {
         val response = httpClient.get(unknownEndpoint)
 
         response.status shouldBe NotFound
         response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
             errcode = "M_NOT_FOUND",
-            error = "No resource was found for this request."
+            error = "unsupported (or unknown) endpoint"
         )
+    }
+
+    /*
+     * Similarly, a 405 M_UNRECOGNIZED error is used to denote an unsupported
+     * method to a known endpoint.
+     *
+     * See https://spec.matrix.org/v1.11/server-server-api/#unsupported-endpoints
+     */
+    @Test
+    fun `respond with M_UNRECOGNIZED for unsupported method of known endpoint`() = runTest {
+        val response = httpClient.post(wellKnownEndpoint)
+
+        assertSoftly {
+            response shouldHaveStatus MethodNotAllowed
+            response.bodyAsText() shouldBe jsonMatrixStandardErrorResponse()
+            response.bodyAsText().shouldContainJsonKeyValue("$.errcode", "M_UNRECOGNIZED")
+        }
     }
 
     @Test
@@ -380,6 +388,36 @@ class InboundProxyIT {
               "errcode": "M_FORBIDDEN",
               "error": "threading is not allowed"
             }"""
+        }
+    }
+
+    @Test
+    fun shouldNotFindPreviewUrlEndpoint() = runTest {
+        testApplication {
+            proxyWithClientServerRoutes(defaultConfig(httpClient = client))
+            homeserverWithRouting {
+                get("/_matrix/client/v1/media/preview_url") {
+                    call.respondText("Hi!")
+                }
+            }
+
+            val response = client.get("/_matrix/client/v1/media/preview_url")
+            response shouldHaveStatus NotFound
+        }
+    }
+
+    @Test
+    fun shouldNotFindLegacyPreviewUrlEndpoint() = runTest {
+        testApplication {
+            proxyWithClientServerRoutes(defaultConfig(httpClient = client))
+            homeserverWithRouting {
+                get("/_matrix/media/v3/preview_url") {
+                    call.respondText("Hi!")
+                }
+            }
+
+            val response = client.get("/_matrix/media/v3/preview_url")
+            response shouldHaveStatus NotFound
         }
     }
 }

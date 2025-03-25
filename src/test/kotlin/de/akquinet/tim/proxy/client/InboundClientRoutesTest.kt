@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package de.akquinet.tim.proxy.client
 
 import de.akquinet.tim.proxy.InviteRejectionPolicy
@@ -123,7 +122,77 @@ class InboundClientRoutesTest : ShouldSpec({
         }
     }
 
-    context("media routes") {
+    context("media routes (/_matrix/media/v3/)") {
+        context("deprecated routes") {
+
+            // A_26328 - Prüfung eingehender Medienanfragen
+            // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_26328
+            // A_25534 - Fehlschlag Föderationsprüfung
+            // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_25534
+            should("reject requests for media on unfederated servers") {
+                testApplication {
+                    val client = createClient { install(ContentNegotiation) { json() } }
+                    application { testModule(client) }
+
+                    val response = client.get("/_matrix/media/v3/download/unfederatedServer/1")
+
+                    response shouldHaveStatus Forbidden
+                    response.bodyAsText() shouldEqualJson """
+                    { 
+                      "errcode": "M_FORBIDDEN",  
+                      "error": "unfederatedServer kann nicht in der Föderation gefunden werden"  
+                    }
+                """
+                }
+            }
+
+            should("relay requests for media on federated servers") {
+                testApplication {
+                    val client = createClient { install(ContentNegotiation) { json() } }
+                    application { testModule(client) }
+                    homeserverWithRouting {
+                        get("/_matrix/media/v3/download/federated.org/1") {
+                            call.respond(OK, "blimey")
+                        }
+                    }
+
+                    val response = client.get("/_matrix/media/v3/download/federated.org/1")
+
+                    response shouldHaveStatus OK
+                    response.bodyAsText() shouldBe "blimey"
+                }
+            }
+
+            // gematik test cases 10X.01.03, 10X.01.04
+            should("relay requests for media on federated servers (renaming endpoint)") {
+                testApplication {
+                    val client = createClient { install(ContentNegotiation) { json() } }
+                    application { testModule(client) }
+                    homeserverWithRouting {
+                        get("/_matrix/media/v3/download/federated.org/1/new-filename.exe") {
+                            call.respond(OK, "blimey")
+                        }
+                    }
+
+                    val response = client.get("/_matrix/media/v3/download/federated.org/1/new-filename.exe")
+
+                    response shouldHaveStatus OK
+                    response.bodyAsText() shouldBe "blimey"
+                }
+            }
+
+            should("block requests for unauthenticated media config") {
+                testApplication {
+                    val client = createClient { install(ContentNegotiation) { json() } }
+                    application { testModule(client) }
+
+                    val response = client.get("/_matrix/media/v3/config")
+
+                    response shouldHaveStatus NotFound
+                }
+            }
+
+        }
 
         // A_26328 - Prüfung eingehender Medienanfragen
         // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_26328
@@ -134,7 +203,7 @@ class InboundClientRoutesTest : ShouldSpec({
                 val client = createClient { install(ContentNegotiation) { json() } }
                 application { testModule(client) }
 
-                val response = client.get("/_matrix/media/v3/download/unfederatedServer/1")
+                val response = client.get("/_matrix/client/v1/media/download/unfederatedServer/1")
 
                 response shouldHaveStatus Forbidden
                 response.bodyAsText() shouldEqualJson """
@@ -150,20 +219,52 @@ class InboundClientRoutesTest : ShouldSpec({
             testApplication {
                 val client = createClient { install(ContentNegotiation) { json() } }
                 application { testModule(client) }
-                externalServices {
-                    hosts("https://internal-matrix-server:8090") {
-                        routing {
-                            get("/_matrix/media/v3/download/federated.org/1") {
-                                call.respond(OK, "blimey")
-                            }
-                        }
+                homeserverWithRouting {
+                    get("/_matrix/client/v1/media/download/federated.org/1") {
+                        call.respond(OK, "blimey")
                     }
                 }
 
-                val response = client.get("/_matrix/media/v3/download/federated.org/1")
+                val response = client.get("/_matrix/client/v1/media/download/federated.org/1")
 
                 response shouldHaveStatus OK
                 response.bodyAsText() shouldBe "blimey"
+            }
+        }
+
+        // gematik test cases 10X.01.03, 10X.01.04
+        should("relay requests for media on federated servers (renaming endpoint)") {
+            testApplication {
+                val client = createClient { install(ContentNegotiation) { json() } }
+                application { testModule(client) }
+                homeserverWithRouting {
+                    get("/_matrix/client/v1/media/download/federated.org/1/new-filename.exe") {
+                        call.respond(OK, "blimey")
+                    }
+                }
+
+                val response = client.get("/_matrix/client/v1/media/download/federated.org/1/new-filename.exe")
+
+                response shouldHaveStatus OK
+                response.bodyAsText() shouldBe "blimey"
+            }
+        }
+
+
+        should("forward authenticated requests for media config") {
+            testApplication {
+                val client = createClient { install(ContentNegotiation) { json() } }
+                application { testModule(client) }
+                homeserverWithRouting {
+                    get("/_matrix/client/v1/media/config") {
+                        call.respond(OK, """{"m.upload.size": 50000000}""")
+                    }
+                }
+
+                val response = client.get("/_matrix/client/v1/media/config")
+
+                response shouldHaveStatus OK
+                response.bodyAsText() shouldEqualJson """{"m.upload.size": 50000000}"""
             }
         }
 
@@ -226,3 +327,12 @@ class InboundClientRoutesTest : ShouldSpec({
     }
 
 })
+
+fun ApplicationTestBuilder.homeserverWithRouting(configuration: Routing.() -> Unit) {
+    externalServices {
+        hosts("https://internal-matrix-server:8090") {
+            install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) { json() }
+            routing { configuration() }
+        }
+    }
+}

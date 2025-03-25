@@ -27,6 +27,7 @@ import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.VZDPublicIDCheckMock
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.rawdata.model.RawDataMetaData
+import de.akquinet.tim.proxy.util.customMatrixServer
 import de.akquinet.tim.shouldEqualJsonMatrixStandard
 import io.kotest.assertions.assertSoftly
 import io.kotest.assertions.json.shouldEqualJson
@@ -42,6 +43,7 @@ import io.ktor.http.*
 import io.ktor.http.ContentType.Application
 import io.ktor.http.HttpHeaders.Authorization
 import io.ktor.http.HttpStatusCode.Companion.Forbidden
+import io.ktor.http.HttpStatusCode.Companion.MethodNotAllowed
 import io.ktor.http.HttpStatusCode.Companion.NotFound
 import io.ktor.http.HttpStatusCode.Companion.OK
 import io.ktor.http.HttpStatusCode.Companion.Unauthorized
@@ -55,7 +57,6 @@ import io.ktor.server.testing.*
 import io.mockk.spyk
 import kotlinx.serialization.json.Json
 import net.folivo.trixnity.api.client.MatrixApiClient
-import net.folivo.trixnity.api.server.matrixApiServer
 import net.folivo.trixnity.clientserverapi.server.matrixAccessTokenAuth
 import kotlin.time.Duration.Companion.hours
 
@@ -153,7 +154,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                     }
                 }
 
-                matrixApiServer(Json) {
+                customMatrixServer(Json) {
                     authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
                         with(
                             InboundFederationRoutesImpl(
@@ -247,11 +248,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         should("forward federated domain") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
-                    FederationList.FederationDomain(
-                        domain = "fed",
-                        isInsurance = true,
-                        telematikID = "telematik"
-                    )
+                    insuranceDomainFed()
                 )
                 val response = client.postKeyClaimAuthenticated()
 
@@ -265,11 +262,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         should("should forward get event with raw data send") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
-                    FederationList.FederationDomain(
-                        domain = "fed",
-                        isInsurance = true,
-                        telematikID = "telematik"
-                    )
+                    insuranceDomainFed()
                 )
                 val response = client.getEventAuthenticated()
 
@@ -317,11 +310,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                         }
                     }
                 }
-                federationListCacheMock.domains.value += FederationList.FederationDomain(
-                    domain = "fed",
-                    isInsurance = true,
-                    telematikID = "telematik"
-                )
+                federationListCacheMock.domains.value += insuranceDomainFed()
 
                 val response = client.get("/_matrix/federation/v1/version") {
                     matrixAuthorizationHeader()
@@ -338,14 +327,78 @@ class InboundFederationCheckerImplTest : ShouldSpec({
 
             response shouldHaveStatus NotFound
             response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
-                errcode = "M_UNRECOGNIZED",
+                errcode = "M_NOT_FOUND",
                 error = "unsupported (or unknown) endpoint",
             )
         }
     }
 
+    /*
+     * Similarly, a 405 M_UNRECOGNIZED error is used to denote an unsupported
+     * method to a known endpoint.
+     *
+     * See https://spec.matrix.org/v1.11/server-server-api/#unsupported-endpoints
+     */
+    context("respond with M_UNRECOGNIZED for unsupported method of known endpoint") {
+        should("POST") {
+            withCut {
+                val response = client.post("/.well-known/matrix/server")
+
+                assertSoftly {
+                    response shouldHaveStatus MethodNotAllowed
+                    response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+                        errcode = "M_UNRECOGNIZED",
+                        error = "This endpoint is implemented, but the method is not supported.",
+                    )
+                }
+            }
+        }
+
+        should("PUT") {
+            withCut {
+                val response = client.put("/.well-known/matrix/server")
+
+                assertSoftly {
+                    response shouldHaveStatus MethodNotAllowed
+                    response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+                        errcode = "M_UNRECOGNIZED",
+                        error = "This endpoint is implemented, but the method is not supported.",
+                    )
+                }
+            }
+        }
+
+        should("DELETE") {
+            withCut {
+                val response = client.delete("/.well-known/matrix/server")
+
+                assertSoftly {
+                    response shouldHaveStatus MethodNotAllowed
+                    response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+                        errcode = "M_UNRECOGNIZED",
+                        error = "This endpoint is implemented, but the method is not supported.",
+                    )
+                }
+            }
+        }
+
+        should("PATCH") {
+            withCut {
+                val response = client.patch("/.well-known/matrix/server")
+
+                assertSoftly {
+                    response shouldHaveStatus MethodNotAllowed
+                    response.bodyAsText() shouldEqualJsonMatrixStandard ErrorResponse(
+                        errcode = "M_UNRECOGNIZED",
+                        error = "This endpoint is implemented, but the method is not supported.",
+                    )
+                }
+            }
+        }
+    }
+
     context("federation invite") {
-        suspend fun HttpClient.putInvite(inviting: String, invited: String = "@joe:fed") =
+        suspend fun HttpClient.putInvite(sender: String, invited: String) =
             put("/_matrix/federation/v2/invite/{roomId}/{eventId}") {
                 matrixAuthorizationHeader()
                 contentType(Application.Json)
@@ -358,7 +411,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                         },
                         "origin": "matrix.org",
                         "origin_server_ts": 1234567890,
-                        "sender": "$inviting",
+                        "sender": "$sender",
                         "state_key": "$invited",
                         "type": "m.room.member"
                       },
@@ -391,29 +444,24 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         should("fail if neither contact nor FHIR entry if check on proxy") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
-                    FederationList.FederationDomain(
-                        domain = "fed",
-                        isInsurance = true,
-                        telematikID = "telematik"
-                    )
+                    insuranceDomainFed()
                 )
-                val response = client.putInvite("@someone:example.org")
+                val response = client.putInvite(sender = "@someone:fed", invited = "@joe:fed")
 
                 response shouldHaveStatus Forbidden
-                response.bodyAsText() shouldEqualJson """{"errcode":"M_FORBIDDEN","error":"can not invite this user"}"""
+                response.bodyAsText() shouldEqualJson """{
+                        "errcode":"M_FORBIDDEN",
+                        "error":"can not invite this user"
+                    }"""
             }
         }
 
         should("succeed for valid contact") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
-                    FederationList.FederationDomain(
-                        domain = "fed",
-                        isInsurance = true,
-                        telematikID = "telematik"
-                    )
+                    insuranceDomainFed()
                 )
-                val response = client.putInvite("4444")
+                val response = client.putInvite(sender = "@4444:fed", invited = "@joe:fed")
 
                 response shouldHaveStatus OK
             }
@@ -422,14 +470,10 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         should("succeed for FHIR entry") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
-                    FederationList.FederationDomain(
-                        domain = "fed",
-                        isInsurance = true,
-                        telematikID = "telematik"
-                    )
+                    insuranceDomainFed()
                 )
                 vzdPublicMock.expectedResult = true
-                val response = client.putInvite("@someone:example.org")
+                val response = client.putInvite(sender = "@someone:fed", invited = "@joe:fed")
 
                 response shouldHaveStatus OK
             }
@@ -444,13 +488,9 @@ class InboundFederationCheckerImplTest : ShouldSpec({
             )
             withCut(clientTimAuthorizationCheckConfiguration) {
                 federationListCacheMock.domains.value = setOf(
-                    FederationList.FederationDomain(
-                        domain = "fed",
-                        isInsurance = true,
-                        telematikID = "telematik"
-                    )
+                    insuranceDomainFed()
                 )
-                val response = client.putInvite("@someone:example.org")
+                val response = client.putInvite(sender = "@someone:fed", invited = "@joe:fed")
 
                 response shouldHaveStatus OK
             }
@@ -460,21 +500,36 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#AF_10064-02
         // A_25534 - Fehlschlag Föderationsprüfung
         // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_25534
-        should("reject invites from users outside of federation") {
+        should("reject invites to invitees outside of federation") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
-                    FederationList.FederationDomain(
-                        domain = "fed",
-                        isInsurance = true,
-                        telematikID = "telematik"
-                    )
+                    insuranceDomainFed()
                 )
-                val response = client.putInvite(inviting = "@someone:matrix.org", invited = "@invitee:unfederated.org")
+                val response = client.putInvite(sender = "@someone:fed", invited = "@invitee:invitee.org")
 
                 response shouldHaveStatus Forbidden
                 response.bodyAsText() shouldEqualJson """{
                         "errcode": "M_FORBIDDEN" ,
-                        "error": "unfederated.org kann nicht in der Föderation gefunden werden"
+                        "error": "invitee.org kann nicht in der Föderation gefunden werden"
+                    }"""
+            }
+        }
+
+        // AF_10064-02 - Föderationszugehörigkeit eines Messenger-Service prüfen
+        // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#AF_10064-02
+        // A_25534 - Fehlschlag Föderationsprüfung
+        // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_25534
+        should("reject invites from senders outside of federation") {
+            withCut {
+                federationListCacheMock.domains.value = setOf(
+                    insuranceDomainFed()
+                )
+                val response = client.putInvite(sender = "@someone:sender.org", invited = "@invitee:fed")
+
+                response shouldHaveStatus Forbidden
+                response.bodyAsText() shouldEqualJson """{
+                        "errcode": "M_FORBIDDEN" ,
+                        "error": "sender.org kann nicht in der Föderation gefunden werden"
                     }"""
             }
         }
@@ -514,11 +569,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         should("fail, if user from other homeserver trys to join public room via send_join") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
-                    FederationList.FederationDomain(
-                        domain = "fed",
-                        isInsurance = true,
-                        telematikID = "telematik"
-                    )
+                    insuranceDomainFed()
                 )
                 val response = client.sendJoin("publicRoom")
                 response.status shouldBe Forbidden
@@ -529,11 +580,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         should("succeed if user from other homeserver trys to join a private room via invite") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
-                    FederationList.FederationDomain(
-                        domain = "fed",
-                        isInsurance = true,
-                        telematikID = "telematik"
-                    )
+                    insuranceDomainFed()
                 )
                 val response = client.sendJoin("privateRoom")
                 response.status shouldBe OK
@@ -543,11 +590,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         should("fail, if user from other homeserver trys to join public room via make_join") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
-                    FederationList.FederationDomain(
-                        domain = "fed",
-                        isInsurance = true,
-                        telematikID = "telematik"
-                    )
+                    insuranceDomainFed()
                 )
                 val response = client.makeJoin()
                 response.status shouldBe Forbidden
@@ -556,3 +599,9 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         }
     }
 })
+
+private fun insuranceDomainFed() = FederationList.FederationDomain(
+    domain = "fed",
+    isInsurance = true,
+    telematikID = "telematik"
+)

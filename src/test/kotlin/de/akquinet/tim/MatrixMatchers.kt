@@ -16,6 +16,7 @@
 package de.akquinet.tim
 
 import io.kotest.assertions.json.beJsonObject
+import io.kotest.assertions.json.containJsonKey
 import io.kotest.assertions.json.containJsonKeyValue
 import io.kotest.matchers.Matcher
 import io.kotest.matchers.compose.all
@@ -32,3 +33,10 @@ infix fun String?.shouldEqualJsonMatrixStandard(errorResponse: ErrorResponse) =
     this should equalJsonMatrixStandardErrorResponse(errorResponse)
 
 data class ErrorResponse(val errcode: String, val error: String)
+
+
+fun jsonMatrixStandardErrorResponse(): Matcher<String?> = Matcher.all(
+    beJsonObject(),
+    containJsonKey("$.errcode"),
+    containJsonKey("$.error"),
+)
