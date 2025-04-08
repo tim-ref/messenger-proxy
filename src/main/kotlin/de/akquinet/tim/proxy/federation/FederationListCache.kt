@@ -96,7 +96,7 @@ class FederationListCacheImpl(
                 RequestFileResult.NewFile(content) { it.version.toString() }
             }
 
-            HttpStatusCode.NoContent -> RequestFileResult.NotModified()
+            HttpStatusCode.NotModified -> RequestFileResult.NotModified()
 
             else -> {
                 val content = response.bodyAsText()

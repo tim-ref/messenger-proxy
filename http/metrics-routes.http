@@ -1,0 +1,14 @@
+### GET inbound proxy metrics
+GET http://localhost:8090/metrics
+
+### GET outbound proxy metrics
+GET http://localhost:8093/metrics
+
+### GET Spring Actuator metrics
+GET http://localhost:1233/metrics
+
+### GET TI-M information API metrics
+GET http://localhost:7777/metrics
+
+### GET contact management metrics
+GET http://localhost:8070/metrics

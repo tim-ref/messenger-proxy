@@ -21,6 +21,7 @@ import de.akquinet.tim.proxy.federation.BerechtigungsstufeEinsAuthenticationProv
 import de.akquinet.tim.proxy.federation.Destination
 import de.akquinet.tim.proxy.federation.OutboundFederationRoutes
 import de.akquinet.tim.proxy.federation.berechtigungsstufeEinsCheck
+import de.akquinet.tim.proxy.util.metricsModule
 import io.ktor.client.*
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -39,7 +40,7 @@ import net.folivo.trixnity.core.MatrixServerException
 private val kLog = KotlinLogging.logger { }
 
 interface OutboundProxy {
-    suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit = {}): ApplicationEngine
+    suspend fun start(): ApplicationEngine
 }
 
 @Suppress("ExtractKtorModule")
@@ -60,61 +61,61 @@ class OutboundProxyImpl(
         port = destination.port
     }.build()
 
-    override suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit): ApplicationEngine =
-        embeddedServer(Netty, applicationEngineEnvironment {
-            connector {
-                port = this@OutboundProxyImpl.outboundProxyConfiguration.port
-            }
-            module {
-                configureMatrixFederationCheckAuth()
+    override suspend fun start(): ApplicationEngine =
+        embeddedServer(
+            Netty,
+            port = this@OutboundProxyImpl.outboundProxyConfiguration.port,
+            configure = {
+                channelPipelineConfig = {
+                    addBefore("http1", "tunnel", ProxyConnectionHandler(outboundProxyCertificateManager))
+                }
+            }) {
+            metricsModule()
+            configureMatrixFederationCheckAuth()
 
-                matrixApiServer(Json) {
-                    authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
-                        outboundFederationRoutes.apply { serverServerApiRoutes() }
-                        outboundFederationRoutes.apply { serverServerRawDataRoutes() }
-                    }
+            matrixApiServer(Json) {
+                authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
+                    outboundFederationRoutes.apply { serverServerApiRoutes() }
+                    outboundFederationRoutes.apply { serverServerRawDataRoutes() }
+                }
 
-                    route("/actuator/health") {
-                        handle {
-                            call.respond(HttpStatusCode.OK)
-                        }
-                    }
-
-                    route("/_matrix/push/{...}") {
-                        handle {
-                            forwardRequest(call, httpClient, getDestinationUrl(call = call.request), null)
-                        }
-                    }
-
-                    route("/recaptcha/api/siteverify") {
-                        handle {
-                            forwardRequest(call, httpClient, getDestinationUrl(call = call.request), null)
-                        }
-                    }
-
-                    route("{...}") {
-                        handle {
-                            val host = getDestinationUrl(call = call.request).host
-                            if (host == outboundProxyConfiguration.ssoDomain || "https://$host/" == outboundProxyConfiguration.ssoDomain) {
-                                forwardRequest(call, httpClient, getDestinationUrl(call = call.request), null)
-                            } else {
-                                val requestBody = call.receive<String>()
-                                val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }
-
-                                kLog.warn("outbound request on unhandled path {} with method {} from host {}, body {} and headers {}",
-                                    call.request.uri, call.request.httpMethod, host, requestBody, headerList)
-
-                                throw MatrixServerException(HttpStatusCode.NotFound, ErrorResponse.NotFound(""))
-                            }
-
-                        }
+                route("/actuator/health") {
+                    handle {
+                        call.respond(HttpStatusCode.OK)
                     }
                 }
-            }
-            env()
-        }) {
-            channelPipelineConfig = {
-                addBefore("http1", "tunnel", ProxyConnectionHandler(outboundProxyCertificateManager))
+
+                route("/_matrix/push/{...}") {
+                    handle {
+                        forwardRequest(call, httpClient, getDestinationUrl(call = call.request), null)
+                    }
+                }
+
+                route("/recaptcha/api/siteverify") {
+                    handle {
+                        forwardRequest(call, httpClient, getDestinationUrl(call = call.request), null)
+                    }
+                }
+
+                route("{...}") {
+                    handle {
+                        val host = getDestinationUrl(call = call.request).host
+                        if (host == outboundProxyConfiguration.ssoDomain || "https://$host/" == outboundProxyConfiguration.ssoDomain) {
+                            forwardRequest(call, httpClient, getDestinationUrl(call = call.request), null)
+                        } else {
+                            val requestBody = call.receive<String>()
+                            val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }
+
+                            kLog.warn(
+                                "outbound request on unhandled path {} with method {} from host {}, body {} and headers {}",
+                                call.request.uri, call.request.httpMethod, host, requestBody, headerList
+                            )
+
+                            throw MatrixServerException(HttpStatusCode.NotFound, ErrorResponse.NotFound(""))
+                        }
+
+                    }
+                }
             }
         }.start()
 

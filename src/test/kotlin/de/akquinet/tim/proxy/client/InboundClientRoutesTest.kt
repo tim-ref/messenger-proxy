@@ -23,6 +23,7 @@ import de.akquinet.tim.proxy.federation.FederationList
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.util.customMatrixServer
+import io.kotest.assertions.assertSoftly
 import io.kotest.assertions.json.shouldEqualJson
 import io.kotest.assertions.ktor.client.shouldHaveStatus
 import io.kotest.core.spec.style.ShouldSpec
@@ -32,6 +33,7 @@ import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
+import io.ktor.http.HttpStatusCode.Companion.BadRequest
 import io.ktor.http.HttpStatusCode.Companion.Forbidden
 import io.ktor.http.HttpStatusCode.Companion.NotFound
 import io.ktor.http.HttpStatusCode.Companion.OK
@@ -77,8 +79,7 @@ class InboundClientRoutesTest : ShouldSpec({
         coEvery { matrixTokenAuthMock.invoke(any()) } returns AccessTokenAuthenticationFunctionResult(
             principal = UserIdPrincipal(
                 UserId(full = "@me:example.com")
-            ),
-            cause = null
+            ), cause = null
         )
 
         val rawDataService = RawDataServiceImpl(logInfoConfig, client)
@@ -181,6 +182,34 @@ class InboundClientRoutesTest : ShouldSpec({
                 }
             }
 
+            should("relay requests for thumbnail on federated servers") {
+                testApplication {
+                    val client = createClient { install(ContentNegotiation) { json() } }
+                    application { testModule(client) }
+                    homeserverWithRouting {
+                        get("/_matrix/media/v3/thumbnail/federated.org/1") {
+                            if (call.request.queryParameters["height"] == "100" && call.request.queryParameters["width"] == "200") {
+                                call.respond(OK, "blimey")
+                            } else {
+                                call.respond(BadRequest)
+                            }
+                        }
+                    }
+
+                    val response = client.get("/_matrix/media/v3/thumbnail/federated.org/1") {
+                        url {
+                            parameters.append("height", "100")
+                            parameters.append("width", "200")
+                        }
+                    }
+
+                    assertSoftly {
+                        response shouldHaveStatus OK
+                        response.bodyAsText() shouldBe "blimey"
+                    }
+                }
+            }
+
             should("block requests for unauthenticated media config") {
                 testApplication {
                     val client = createClient { install(ContentNegotiation) { json() } }
@@ -250,6 +279,33 @@ class InboundClientRoutesTest : ShouldSpec({
             }
         }
 
+        should("relay requests for thumbnail on federated servers") {
+            testApplication {
+                val client = createClient { install(ContentNegotiation) { json() } }
+                application { testModule(client) }
+                homeserverWithRouting {
+                    get("/_matrix/client/v1/media/thumbnail/federated.org/1") {
+                        if (call.request.queryParameters["height"] == "100" && call.request.queryParameters["width"] == "200") {
+                            call.respond(OK, "blimey")
+                        } else {
+                            call.respond(BadRequest)
+                        }
+                    }
+                }
+
+                val response = client.get("/_matrix/client/v1/media/thumbnail/federated.org/1") {
+                    url {
+                        parameters.append("height", "100")
+                        parameters.append("width", "200")
+                    }
+                }
+
+                assertSoftly {
+                    response shouldHaveStatus OK
+                    response.bodyAsText() shouldBe "blimey"
+                }
+            }
+        }
 
         should("forward authenticated requests for media config") {
             testApplication {

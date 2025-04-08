@@ -30,6 +30,8 @@ services:
       - "1233:1233"
       # TiMessengerInformation
       - "7777:7777"
+      # contact management
+      - "8070:8070"
     volumes:
       - ./certificates/key.pem:/app/certificates/key.pem
       - ./certificates/ca.crt:/app/certificates/ca.crt

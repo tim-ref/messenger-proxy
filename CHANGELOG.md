@@ -15,37 +15,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 -->
 
-## [Unreleased]
-
-<!--
+## [0.8.0] (published on 2025-04-09)
 
 ### Added
 
-- A new feature.
-
-### Changed
-
-- A change in existing functionality.
-
-### Deprecated
-
-- A soon-to-be removed feature.
+- Micrometer metrics collection and five separate scrape endpoints.
 
 ### Fixed
 
-- A bug fix
+- Aligned expected response for unmodified federation list with API specification.
+- Added routes `/_matrix/client/v1/media/thumbnail/{serverName}/{mediaId}` and
+  `/_matrix/media/v3/thumbnail/{serverName}/{mediaId}`.
 
-### Security
-
-- A vulnerability.
-
--->
-
-## 0.7.2 (published on 2025-03-25)
+## [0.7.2] (published on 2025-03-25)
 
 ### Added
 
-- A Changelog.
+- This change log.
 
 ### Changed
 
@@ -61,14 +47,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Corrected federation check for routes `/_matrix/federation/v2/invite/{roomId}/{eventId}` and
   `/_matrix/federation/v1/invite/{roomId}/{eventId}` (AF_10064-02).
 
-## 0.7.1 (published on 2025-03-17)
+## [0.7.1] (published on 2025-03-17)
 
 ### Added
 
 - Added missing federation check for `/_matrix/federation/v2/invite/{roomId}/{eventId}` and
   `/_matrix/federation/v1/invite/{roomId}/{eventId}` (AF_10064-02).
 
-## 0.7.0 (published on 2025-03-11)
+## [0.7.0] (published on 2025-03-11)
 
 ### Added
 
@@ -85,21 +71,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Authentication of TI-Messenger information API.
 - Added deprecated route `/_matrix/media/v3/download/{serverName}/{mediaId}`.
 
-## 0.6.1 (published on 2025-02-27)
+## [0.6.1] (published on 2025-02-27)
 
-## 0.6.0 (published on 2025-02-18)
+## [0.6.0] (published on 2025-02-18)
 
 ### Added
 
 - Support for Matrix 1.11.
 - Partial support for TI-Messenger Pro.
 
-## 0.5.1 (published on 2025-02-11)
+## [0.5.1] (published on 2025-02-11)
 
-## 0.4.0 (published on 2025-01-09)
+## [0.4.0] (published on 2025-01-09)
 
-## 0.3.0 (published on 2024-09-19)
+## [0.3.0] (published on 2024-09-19)
 
-## 0.2.0 (published on 2024-07-04)
+## [0.2.0] (published on 2024-07-04)
 
-## 0.1.0 (published on 2024-03-13)
+## [0.1.0] (published on 2024-03-13)

@@ -17,6 +17,7 @@ package de.akquinet.tim.proxy.contactmgmt
 
 import de.akquinet.tim.proxy.ProxyConfiguration
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
+import de.akquinet.tim.proxy.util.metricsModule
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -30,7 +31,7 @@ import mu.KotlinLogging
 import kotlin.time.Duration.Companion.hours
 
 interface ContactManagementApi {
-    suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit = {}): ApplicationEngine
+    suspend fun start(): ApplicationEngine
 }
 
 private val logger = KotlinLogging.logger {}
@@ -41,8 +42,8 @@ class ContactManagementApiImpl(
     private val contactManagementService: ContactManagementService
 ) : ContactManagementApi {
     @OptIn(DelicateCoroutinesApi::class)
-    override suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit): ApplicationEngine =
-        embeddedServer(Netty, applicationEngineEnvironment {
+    override suspend fun start(): ApplicationEngine =
+        embeddedServer(Netty, port = this@ContactManagementApiImpl.contactManagementConfig.port) {
 
             if (GlobalScope.async {
                     scheduleExpiredContactCleanup()
@@ -52,23 +53,18 @@ class ContactManagementApiImpl(
                 logger.info { "Cleanup job for expired invite settings already running." }
             }
 
-            connector {
-                port = this@ContactManagementApiImpl.contactManagementConfig.port
-            }
+            metricsModule()
+            contactApiServer {
+                install(ContentNegotiation) {
+                    json()
+                }
 
-            module {
-                contactApiServer {
-                    install(ContentNegotiation) {
-                        json()
-                    }
-
-                    with(contactRoutes) {
-                        apiRoutes()
-                    }
+                with(contactRoutes) {
+                    apiRoutes()
                 }
             }
 
-        }).start()
+        }.start()
 
     private suspend fun scheduleExpiredContactCleanup() {
         while (true) {

@@ -73,6 +73,7 @@ technologies:
 6. The components of this project can be started by using
 
    ```shell
+   docker compose build
    docker compose up
    ```
 

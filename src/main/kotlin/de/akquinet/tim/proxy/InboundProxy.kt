@@ -23,6 +23,7 @@ import de.akquinet.tim.proxy.federation.BerechtigungsstufeEinsAuthenticationProv
 import de.akquinet.tim.proxy.federation.InboundFederationRoutes
 import de.akquinet.tim.proxy.federation.berechtigungsstufeEinsCheck
 import de.akquinet.tim.proxy.util.customMatrixServer
+import de.akquinet.tim.proxy.util.metricsModule
 import io.ktor.client.*
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -40,7 +41,7 @@ import net.folivo.trixnity.core.serialization.createMatrixEventJson
 import org.slf4j.event.Level
 
 interface InboundProxy {
-    suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit = {}): ApplicationEngine
+    suspend fun start(): ApplicationEngine
 }
 
 class InboundProxyImpl(
@@ -51,90 +52,85 @@ class InboundProxyImpl(
     private val inboundFederationRoutes: InboundFederationRoutes,
     private val httpClient: HttpClient
 ) : InboundProxy {
-    override suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit): ApplicationEngine =
-        embeddedServer(Netty, applicationEngineEnvironment {
-            connector {
-                port = this@InboundProxyImpl.inboundProxyConfiguration.port
-            }
-            module {
-                install(CallLogging) {
-                    filter { call -> call.response.status() == HttpStatusCode.NotFound }
-                    level = Level.WARN
-                    format { call ->
-                        val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }
-                        val uri = call.request.uri
-                        val method = call.request.httpMethod.value
+    override suspend fun start(): ApplicationEngine =
+        embeddedServer(Netty, port = this@InboundProxyImpl.inboundProxyConfiguration.port) {
+            metricsModule()
+            install(CallLogging) {
+                filter { call -> call.response.status() == HttpStatusCode.NotFound }
+                level = Level.WARN
+                format { call ->
+                    val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }
+                    val uri = call.request.uri
+                    val method = call.request.httpMethod.value
 
-                        "inbound request on unhandled path $uri with method $method and headers $headerList"
+                    "inbound request on unhandled path $uri with method $method and headers $headerList"
+                }
+            }
+
+            val json = createMatrixEventJson()
+            configureMatrixFederationCheckAuth()
+
+
+            customMatrixServer(json) {
+                installPushrulesRoutesForBadRequest()
+
+                route("/_matrix/federation/v1/openid/userinfo") {
+                    handle {
+                        forwardRequest(
+                            call,
+                            httpClient,
+                            call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl),
+                            null
+                        )
                     }
                 }
 
-                val json = createMatrixEventJson()
-                configureMatrixFederationCheckAuth()
+                inboundClientRoutes.apply { openClientServerApiRoutes() }
+                authenticate("matrix-access-token-auth") {
+                    inboundClientRoutes.apply { clientServerApiRoutes() }
+                }
 
+                authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
+                    inboundFederationRoutes.apply { serverServerApiRoutes() }
+                    inboundFederationRoutes.apply { serverServerRawDataRoutes() }
+                }
 
-                customMatrixServer(json) {
-                    installPushrulesRoutesForBadRequest()
-
-                    route("/_matrix/federation/v1/openid/userinfo") {
-                        handle {
-                            forwardRequest(
-                                call,
-                                httpClient,
-                                call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl),
-                                null
-                            )
-                        }
+                route("/_matrix/client/v1/login/get_token") {
+                    handle {
+                        throw MatrixServerException(
+                            HttpStatusCode.NotFound,
+                            ErrorResponse.NotFound("No resource was found for this request.")
+                        )
                     }
+                }
 
-                    inboundClientRoutes.apply { openClientServerApiRoutes() }
-                    authenticate("matrix-access-token-auth") {
-                        inboundClientRoutes.apply { clientServerApiRoutes() }
+                route("/_matrix/federation/v1/publicRooms") {
+                    handle {
+                        throw MatrixServerException(
+                            HttpStatusCode.Forbidden,
+                            ErrorResponse.Forbidden("A_26520")
+                        )
                     }
+                }
 
-                    authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
-                        inboundFederationRoutes.apply { serverServerApiRoutes() }
-                        inboundFederationRoutes.apply { serverServerRawDataRoutes() }
+                route("/_synapse/admin/{...}") {
+                    handle {
+                        forwardRequest(
+                            call,
+                            httpClient,
+                            call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl),
+                            null
+                        )
                     }
+                }
 
-                    route("/_matrix/client/v1/login/get_token") {
-                        handle {
-                            throw MatrixServerException(
-                                HttpStatusCode.NotFound,
-                                ErrorResponse.NotFound("No resource was found for this request.")
-                            )
-                        }
-                    }
-
-                    route("/_matrix/federation/v1/publicRooms") {
-                        handle {
-                            throw MatrixServerException(
-                                HttpStatusCode.Forbidden,
-                                ErrorResponse.Forbidden("A_26520")
-                            )
-                        }
-                    }
-
-                    route("/_synapse/admin/{...}") {
-                        handle {
-                            forwardRequest(
-                                call,
-                                httpClient,
-                                call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl),
-                                null
-                            )
-                        }
-                    }
-
-                    route("/actuator/health") {
-                        handle {
-                            call.respond(HttpStatusCode.OK)
-                        }
+                route("/actuator/health") {
+                    handle {
+                        call.respond(HttpStatusCode.OK)
                     }
                 }
             }
-            env()
-        }).start()
+        }.start()
 
     private fun Application.configureMatrixFederationCheckAuth() {
         install(Authentication) {

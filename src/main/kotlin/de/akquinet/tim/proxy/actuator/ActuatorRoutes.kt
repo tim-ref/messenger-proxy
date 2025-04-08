@@ -19,24 +19,16 @@ import ch.qos.logback.classic.Level
 import de.akquinet.tim.proxy.ProxyConfiguration
 import de.akquinet.tim.proxy.availability.RegistrationServiceHealthApi
 import de.akquinet.tim.proxy.logging.LogLevelService
-import io.ktor.client.HttpClient
-import io.ktor.client.request.get
-import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.application.call
-import io.ktor.server.engine.ApplicationEngine
-import io.ktor.server.engine.ApplicationEngineEnvironmentBuilder
-import io.ktor.server.engine.applicationEngineEnvironment
-import io.ktor.server.engine.connector
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.netty.Netty
-import io.ktor.server.response.respond
-import io.ktor.server.response.respondText
-import io.ktor.server.routing.get
-import io.ktor.server.routing.put
-import io.ktor.server.routing.routing
-import io.ktor.util.pipeline.PipelineContext
+import de.akquinet.tim.proxy.util.metricsModule
+import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.ktor.util.pipeline.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -45,7 +37,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.sql.SQLException
 
 interface ActuatorRoutes {
-    suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit = {}): ApplicationEngine
+    suspend fun start(): ApplicationEngine
 }
 
 @Serializable
@@ -68,43 +60,39 @@ class ActuatorRoutesImpl(
     private val registrationServiceHealthApi: RegistrationServiceHealthApi,
     private val httpClient: HttpClient
 ) : ActuatorRoutes {
-    override suspend fun start(env: ApplicationEngineEnvironmentBuilder.() -> Unit): ApplicationEngine =
-        embeddedServer(Netty, applicationEngineEnvironment {
-            connector {
-                port = this@ActuatorRoutesImpl.actuatorConfig.port
-            }
-            module {
-                routing {
-                    val healthPath = "${actuatorConfig.basePath}/health"
-                    val loggingPath = "${actuatorConfig.basePath}/logging"
+    override suspend fun start(): ApplicationEngine =
+        embeddedServer(Netty, port = this@ActuatorRoutesImpl.actuatorConfig.port) {
+            metricsModule()
+            routing {
+                val healthPath = "${actuatorConfig.basePath}/health"
+                val loggingPath = "${actuatorConfig.basePath}/logging"
 
-                    // Liveness probe
-                    get("$healthPath/liveness") {
-                        performHealthCheck(healthPath)
-                    }
+                // Liveness probe
+                get("$healthPath/liveness") {
+                    performHealthCheck(healthPath)
+                }
 
-                    // Readiness probe
-                    get("$healthPath/readiness") {
-                        handleReadinessRequest()
-                    }
+                // Readiness probe
+                get("$healthPath/readiness") {
+                    handleReadinessRequest()
+                }
 
-                    // logger actuator
-                    get("$loggingPath/levels") {
-                        performLoggerActuator()
-                    }
+                // logger actuator
+                get("$loggingPath/levels") {
+                    performLoggerActuator()
+                }
 
-                    val paramNewLogLevel = "newLogLevel"
-                    put("$loggingPath/{$paramNewLogLevel}") {
-                        initiateLogs(paramNewLogLevel)
-                    }
+                val paramNewLogLevel = "newLogLevel"
+                put("$loggingPath/{$paramNewLogLevel}") {
+                    initiateLogs(paramNewLogLevel)
+                }
 
-                    val paramLoggerIdentifier = "loggerIdentifier"
-                    put("$loggingPath/{$paramNewLogLevel}/{$paramLoggerIdentifier}") {
-                        configureLogs(paramNewLogLevel, paramLoggerIdentifier)
-                    }
+                val paramLoggerIdentifier = "loggerIdentifier"
+                put("$loggingPath/{$paramNewLogLevel}/{$paramLoggerIdentifier}") {
+                    configureLogs(paramNewLogLevel, paramLoggerIdentifier)
                 }
             }
-        }).start()
+        }.start()
 
     private fun PipelineContext<Unit, ApplicationCall>.configureLogs(
         paramNewLogLevel: String,

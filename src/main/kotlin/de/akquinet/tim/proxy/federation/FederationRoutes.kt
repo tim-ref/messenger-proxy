@@ -26,7 +26,6 @@ import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import net.folivo.trixnity.api.server.matrixEndpointResource
 import net.folivo.trixnity.clientserverapi.model.media.DownloadMediaLegacy
-import net.folivo.trixnity.clientserverapi.model.media.DownloadThumbnailLegacy
 import net.folivo.trixnity.clientserverapi.model.media.GetMediaConfig
 import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.serverserverapi.model.discovery.GetServerKeys
@@ -80,9 +79,14 @@ abstract class FederationRoutesImpl(
         forwardEndpointWithoutCallReceival<DownloadMediaR0>()
         // media V1 --> A_26262
         forwardEndpointWithoutCallReceival<DownloadMediaV1>()
-        forwardEndpoint<DownloadThumbnail>()
+
+//            forwardEndpoint<DownloadThumbnail>()        // Fehlerhaft
+        forwardEndpoint<DownloadThumbnailWithOptionalMethod>()
+
         @Suppress("DEPRECATION")
-        forwardEndpoint<DownloadThumbnailLegacy>()
+//            forwardEndpoint<DownloadThumbnailLegacy>()  // Fehlerhaft
+        forwardEndpoint<DownloadThumbnailLegacyWithOptionalMethod>()
+
         forwardEndpoint<DownloadThumbnailR0>()
 
         forwardEndpoint<DownloadThumbnailV1>()

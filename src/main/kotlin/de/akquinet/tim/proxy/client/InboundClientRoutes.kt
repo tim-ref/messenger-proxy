@@ -150,8 +150,10 @@ class InboundClientRoutesImpl(
             @Suppress("DEPRECATION")
             forwardEndpointWithoutCallReceival<DownloadMediaWithFilenameLegacy>()
             @Suppress("DEPRECATION")
-            forwardEndpoint<DownloadThumbnailLegacy>()
-            forwardEndpoint<DownloadThumbnail>()
+//            forwardEndpoint<DownloadThumbnailLegacy>()  // Fehlerhaft
+            forwardEndpoint<DownloadThumbnailLegacyWithOptionalMethod>()
+//            forwardEndpoint<DownloadThumbnail>()        // Fehlerhaft
+            forwardEndpoint<DownloadThumbnailWithOptionalMethod>()
         }
     }
 

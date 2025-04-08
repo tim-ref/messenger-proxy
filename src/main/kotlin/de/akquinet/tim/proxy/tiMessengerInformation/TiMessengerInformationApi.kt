@@ -22,6 +22,7 @@ import arrow.core.raise.ensureNotNull
 import de.akquinet.tim.proxy.ProxyConfiguration
 import de.akquinet.tim.proxy.authorization.MatrixAuthorizationService
 import de.akquinet.tim.proxy.federation.FederationListCache
+import de.akquinet.tim.proxy.util.metricsModule
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -38,16 +39,12 @@ class TiMessengerInformationApi(
     private val basePath = "/tim-information"
 
     fun start(): ApplicationEngine =
-        embeddedServer(Netty, applicationEngineEnvironment {
-            connector {
-                port = configuration.port
+        embeddedServer(Netty, port = configuration.port) {
+            metricsModule()
+            routing {
+                tiMessengerInformationRoutes()
             }
-            module {
-                routing {
-                    tiMessengerInformationRoutes()
-                }
-            }
-        }).start()
+        }.start()
 
     fun Route.tiMessengerInformationRoutes() {
         route(basePath) {

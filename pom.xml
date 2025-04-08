@@ -10,7 +10,7 @@
 
     <groupId>de.akquinet.timref.fachdienst.messenger-proxy</groupId>
     <artifactId>mp-backend</artifactId>
-    <version>0.7.2</version>
+    <version>0.8.0</version>
 
     <name>Messenger-Proxy</name>
     <description>Messenger-Proxy für die TIM Referenzimplementierung</description>
@@ -61,6 +61,7 @@
         <postgresql.version>42.7.3</postgresql.version>
         <logback.version>1.5.6</logback.version>
         <byte-buddy.version>1.14.10</byte-buddy.version>
+        <prometheus.version>1.13.0</prometheus.version>
 
         <kotest.version>5.8.1</kotest.version>
         <mockk.version>1.13.10</mockk.version>
@@ -135,6 +136,10 @@
         </dependency>
         <dependency>
             <groupId>io.ktor</groupId>
+            <artifactId>ktor-server-metrics-micrometer-jvm</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.ktor</groupId>
             <artifactId>ktor-server-auth-jvm</artifactId>
         </dependency>
         <dependency>
@@ -172,6 +177,11 @@
         <dependency>
             <groupId>io.ktor</groupId>
             <artifactId>ktor-server-status-pages-jvm</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <version>${prometheus.version}</version>
         </dependency>
         <dependency>
             <groupId>com.sksamuel.hoplite</groupId>
@@ -955,7 +965,7 @@
     <scm>
         <connection>${env.CI_SCM_CONNECTION}</connection>
         <developerConnection>${env.CI_SCM_DEVELOPER_CONNECTION}</developerConnection>
-        <tag>0.7.2</tag>
+        <tag>0.8.0</tag>
         <url>${env.CI_SCM_URL}</url>
     </scm>
 </project>
