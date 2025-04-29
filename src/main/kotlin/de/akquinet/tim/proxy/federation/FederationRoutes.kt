@@ -18,7 +18,7 @@ package de.akquinet.tim.proxy.federation
 import de.akquinet.tim.proxy.client.model.route.*
 import de.akquinet.tim.proxy.federation.model.route.*
 import de.akquinet.tim.proxy.forwardRequest
-import de.akquinet.tim.proxy.forwardRequestWithoutCallReceival
+import de.akquinet.tim.proxy.forwardMediaRequest
 import io.ktor.client.*
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -119,7 +119,7 @@ abstract class FederationRoutesImpl(
 
     private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpointWithoutCallReceival() {
         matrixEndpointResource<ENDPOINT> {
-            forwardRequestWithoutCallReceival(call, httpClient, call.request.getDestinationUrl())
+            forwardMediaRequest(call, httpClient, call.request.getDestinationUrl())
         }
     }
 

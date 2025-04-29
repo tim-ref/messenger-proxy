@@ -25,6 +25,8 @@ ARG JAR_FILE
 COPY $JAR_FILE /app/mp-backend-jar-with-dependencies.jar
 COPY java.security /app
 
+ENV JAVA_TOOL_OPTIONS="-XX:+UseZGC -XX:MaxRAMPercentage=60.0"
+
 ENTRYPOINT ["java", \
     "-Djava.security.properties==/app/java.security", \
     "-Djdk.tls.namedGroups=brainpoolP384r1tls13,brainpoolP256r1tls13,brainpoolP384r1,brainpoolP256r1,secp384r1,secp256r1", \

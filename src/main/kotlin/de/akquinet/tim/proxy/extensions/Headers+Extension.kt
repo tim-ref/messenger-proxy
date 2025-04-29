@@ -32,3 +32,9 @@ fun Headers.filterUnsafeHeaders(): Headers =
 
  val Headers.isChunkedTransferEncoding: Boolean
     get() = get(HttpHeaders.TransferEncoding)?.contains("chunked") ?: false
+
+val Headers.contentType: ContentType?
+    get() = get(HttpHeaders.ContentType)?.let { ContentType.parse(it) }
+
+val Headers.contentLength: Long?
+    get() = get(HttpHeaders.ContentLength)?.toLong()

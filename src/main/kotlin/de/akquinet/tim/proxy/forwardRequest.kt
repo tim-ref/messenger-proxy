@@ -17,7 +17,11 @@ package de.akquinet.tim.proxy
 
 import de.akquinet.tim.proxy.extensions.filterUnsafeHeaders
 import de.akquinet.tim.proxy.extensions.isChunkedTransferEncoding
+import de.akquinet.tim.proxy.streaming.RequestWriter
+import de.akquinet.tim.proxy.streaming.StreamingRequestWriter
+import de.akquinet.tim.proxy.streaming.StreamingResponseReader
 import io.ktor.client.*
+import io.ktor.client.call.body
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -27,13 +31,13 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.util.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import org.koin.core.time.measureTimedValue
 
 private val log = KotlinLogging.logger { }
-private val chunkedEncodingBodyMessage = "body is empty because of chunkedTransferEncoding".toByteArray()
 
 /**
  * Forwards an incoming request, and relays the destination's response.
@@ -108,39 +112,31 @@ suspend fun forwardRequestWithDefaultResponse(
     )
 }
 
-suspend fun forwardRequestWithoutCallReceival(
+suspend fun forwardMediaRequest(
     call: ApplicationCall,
     httpClient: HttpClient,
-    destinationUrl: Url
-): Quadruple<ApplicationRequest, HttpResponse, Long, Int> {
-    val start = System.nanoTime()
-
-    val response =
-        httpClient.request {
-            method = call.request.httpMethod
-            url(destinationUrl)
-            val requestHeaders = call.request.headers
-            val safeRequestHeaders = requestHeaders.filterUnsafeHeaders()
-
-            if (requestHeaders.isChunkedTransferEncoding) {
-                logIncomingRequest(call, destinationUrl, chunkedEncodingBodyMessage, requestHeaders)
-                setBody(object : OutgoingContent.WriteChannelContent() {
-                    override val headers: Headers = safeRequestHeaders
-                    override suspend fun writeTo(channel: ByteWriteChannel) {
-                        call.request.receiveChannel().copyAndClose(channel)
-                    }
-                })
-            } else {
-                val requestBody = call.request.receiveChannel().toByteArray()
-                logIncomingRequest(call, destinationUrl, requestBody, requestHeaders)
-                headers { appendAll(safeRequestHeaders) }
-                setBody(requestBody)
+    destinationUrl: Url,
+    requestBody: String? = null
+) {
+    httpClient.prepareRequest {
+        method = call.request.httpMethod
+        url(destinationUrl)
+        requestBody?.let {
+            setBody(RequestWriter(call, it.encodeToByteArray()))
+        } ?: setBody(StreamingRequestWriter(call))
+    }.execute { response ->
+        coroutineScope {
+            val synapseResponseBody: ByteReadChannel = response.body()
+            val writerJob = writer(autoFlush = true) {
+                while (!synapseResponseBody.isClosedForRead) {
+                    val packet = synapseResponseBody.readRemaining(DEFAULT_BUFFER_SIZE.toLong())
+                    channel.writePacket(packet)
+                }
             }
+            val responseReader = StreamingResponseReader(response, writerJob.channel)
+            call.respond(responseReader)
         }
-    sendResponse(response, call)
-    logOutgoingResponse(call, destinationUrl, response)
-
-    return Quadruple(call.request, response, (System.nanoTime() - start) / 1000000, response.bodyAsText().length)
+    }
 }
 
 private suspend fun sendResponse(

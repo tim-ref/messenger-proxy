@@ -686,7 +686,7 @@ class InboundClientRoutesImpl(
 
     private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpointWithoutCallReceival() {
         matrixEndpointResource<ENDPOINT> {
-            forwardRequestWithoutCallReceival(call, httpClient, call.request.uri.mergeToUrl(config.homeserverUrl))
+            forwardMediaRequest(call, httpClient, call.request.uri.mergeToUrl(config.homeserverUrl))
         }
     }
 }

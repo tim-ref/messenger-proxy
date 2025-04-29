@@ -10,7 +10,7 @@
 
     <groupId>de.akquinet.timref.fachdienst.messenger-proxy</groupId>
     <artifactId>mp-backend</artifactId>
-    <version>0.8.0</version>
+    <version>0.8.1</version>
 
     <name>Messenger-Proxy</name>
     <description>Messenger-Proxy für die TIM Referenzimplementierung</description>
@@ -965,7 +965,7 @@
     <scm>
         <connection>${env.CI_SCM_CONNECTION}</connection>
         <developerConnection>${env.CI_SCM_DEVELOPER_CONNECTION}</developerConnection>
-        <tag>0.8.0</tag>
+        <tag>0.8.1</tag>
         <url>${env.CI_SCM_URL}</url>
     </scm>
 </project>
