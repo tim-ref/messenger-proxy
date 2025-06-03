@@ -26,6 +26,7 @@ import de.akquinet.tim.proxy.client.UserIdPrincipal
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.rawdata.model.RawDataMetaData
+import de.akquinet.tim.proxy.validation.SendMessageValidationService
 import de.akquinet.tim.shouldEqualJsonMatrixStandard
 import io.kotest.assertions.assertSoftly
 import io.kotest.assertions.json.shouldEqualJson
@@ -166,7 +167,8 @@ class InboundClientCheckerImplTest : ShouldSpec({
                     invitePermissionCheckEndpoint = "/backend/vzd/invite",
                     readinessEndpoint = "/actuator/health/readiness",
                     wellKnownSupportEndpoint = "/backend/well-known-support"
-                )
+                ),
+                sendMessageValidationService = SendMessageValidationService(),
             )
             application {
                 install(Authentication) {

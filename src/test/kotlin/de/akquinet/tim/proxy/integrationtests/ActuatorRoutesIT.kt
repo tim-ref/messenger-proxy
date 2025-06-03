@@ -30,6 +30,7 @@ import de.akquinet.tim.proxy.mocks.ContactManagementStub
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.RawDataServiceStub
 import de.akquinet.tim.proxy.mocks.VZDPublicIDCheckMock
+import de.akquinet.tim.proxy.validation.SendMessageValidationService
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.ktor.client.*
@@ -175,7 +176,8 @@ class ActuatorRoutesIT {
                     httpClient = httpClient,
                     berechtigungsstufeEinsService = bsEinsService,
                     rawDataService = rawDataServiceStub,
-                    regServiceConfig = regServerConfig
+                    regServiceConfig = regServerConfig,
+                    sendMessageValidationService = SendMessageValidationService(),
                 ),
                 inboundFederationRoutes = InboundFederationRoutesImpl(
                     config = inboundProxyConfig,

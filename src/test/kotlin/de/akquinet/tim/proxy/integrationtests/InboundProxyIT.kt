@@ -17,17 +17,24 @@ package de.akquinet.tim.proxy.integrationtests
 
 import de.akquinet.tim.ErrorResponse
 import de.akquinet.tim.jsonMatrixStandardErrorResponse
-import de.akquinet.tim.proxy.*
+import de.akquinet.tim.proxy.InboundProxyImpl
+import de.akquinet.tim.proxy.InviteRejectionPolicy
+import de.akquinet.tim.proxy.ProxyConfiguration
+import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
+import de.akquinet.tim.proxy.defaultConfig
 import de.akquinet.tim.proxy.federation.FederationList
 import de.akquinet.tim.proxy.federation.InboundFederationRoutesImpl
+import de.akquinet.tim.proxy.homeserverWithRouting
 import de.akquinet.tim.proxy.mocks.ContactManagementStub
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.RawDataServiceStub
 import de.akquinet.tim.proxy.mocks.VZDPublicIDCheckMock
+import de.akquinet.tim.proxy.proxyWithClientServerRoutes
+import de.akquinet.tim.proxy.validation.SendMessageValidationService
 import de.akquinet.tim.shouldEqualJsonMatrixStandard
 import io.kotest.assertions.assertSoftly
 import io.kotest.assertions.json.shouldContainJsonKeyValue
@@ -83,7 +90,7 @@ class InboundProxyIT {
     private val pushRuleWithoutTemplateEndpoint = "$proxy/_matrix/client/v3/pushrules/global/not_a_template/foo"
     private val getTokenEndpoint = "$proxy/_matrix/client/v1/login/get_token"
     private val registerAsGuestEndpoint = "$proxy/_matrix/client/v3/register?kind=guest"
-    private val eventEndpoint = "/_matrix/client/v3/rooms/room1%3Asynapse/send/m.room.encrypted/abc"
+    private val reactionEndpoint = "/_matrix/client/v3/rooms/room1%3Asynapse/send/m.reaction/abc"
     private val httpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) {
             json()
@@ -154,7 +161,8 @@ class InboundProxyIT {
                         invitePermissionCheckEndpoint = "/backend/vzd/invite",
                         readinessEndpoint = "/actuator/health/readiness",
                         wellKnownSupportEndpoint = "/backend/well-known-support"
-                    )
+                    ),
+                    sendMessageValidationService = SendMessageValidationService(),
                 ),
                 inboundFederationRoutes = InboundFederationRoutesImpl(
                     config = inboundProxyConfig,
@@ -283,30 +291,20 @@ class InboundProxyIT {
 
         testApplication {
             proxyWithClientServerRoutes(defaultConfig(httpClient = client))
-            homeserverWithRouting {
-                put(eventEndpoint) {
-                    call.respondText(
-                        contentType = Json,
-                        status = OK,
-                        text = "blubb"
-                    )
-                }
-            }
 
-            val response = client.put(eventEndpoint) {
-                headers {
-                    append(HttpHeaders.ContentType, "application/json")
-                    append("authorization", "Bearer Super key")
-                }
+            val response = client.put(reactionEndpoint) {
+                contentType(Json)
                 setBody(requestBody)
             }
 
-            response.status shouldBe BadRequest
-            response.bodyAsText() shouldEqualJson
-                    """{
-                    "errcode": "M_TOO_LARGE",
-                    "error":"Key is longer than 1 character"
-                }"""
+            assertSoftly {
+                response shouldHaveStatus BadRequest
+                response.bodyAsText() shouldEqualJson
+                        """{
+                            "errcode": "M_BAD_JSON",
+                            "error":"Reaction key must not be longer than one emoji – see A_26228-01"
+                        }"""
+            }
         }
     }
 
@@ -328,7 +326,7 @@ class InboundProxyIT {
         testApplication {
             proxyWithClientServerRoutes(defaultConfig(httpClient = client))
             homeserverWithRouting {
-                put(eventEndpoint) {
+                put(reactionEndpoint) {
                     call.respondText(
                         contentType = Json,
                         status = OK,
@@ -338,7 +336,7 @@ class InboundProxyIT {
             }
 
             val response =
-                client.put(eventEndpoint) {
+                client.put(reactionEndpoint) {
                     contentType(Json)
                     accept(Json)
                     setBody(requestBody)
@@ -364,30 +362,57 @@ class InboundProxyIT {
 
         testApplication {
             proxyWithClientServerRoutes(defaultConfig(httpClient = client))
-            homeserverWithRouting {
-                put(eventEndpoint) {
-                    call.respondText(
-                        contentType = Json,
-                        status = OK,
-                        text = "blubb"
-                    )
-                }
-            }
 
-            val response = client.put(eventEndpoint) {
-                headers {
-                    append(HttpHeaders.ContentType, "application/json")
-                    append("authorization", "Bearer Super key")
-                }
+            val response = client.put(reactionEndpoint) {
+                contentType(Json)
                 setBody(requestBody)
             }
 
-            response.status shouldBe BadRequest
+            response shouldHaveStatus BadRequest
             response.bodyAsText() shouldEqualJson """
             {
               "errcode": "M_FORBIDDEN",
-              "error": "threading is not allowed"
+              "error": "Message threading is not supported – see A_25395-02"
             }"""
+        }
+    }
+
+    @Test
+    fun `can handle payload`() = runTest {
+        val requestBody = """
+            {
+              "algorithm": "m.megolm.v1.aes-sha2",
+              "ciphertext": "AwgFEsAGQynnHAUqT1QM+5OEveeaIEqXUgzB6rMwhLtuA1VOYhP6X/Hb7e2atoqmHedtwXECfHle8lhZGjLfgZOGjnEDteKdGytG07iy5m+6nATS8+pkrPoFkCnYZhEM6K3OPrpltLjjYsYPhJvwbR3IqOFccPk8rKqT/768fUYft4e63pek6adMPJaTqMpJV8XuaJStFmeOX8z1FJ0mQlGVzKJUaAw1TFMp38hatoIclmV4vh23Cpwr4Mjov0NA4l5zc8SfLc8l94ydEiERj9opebB5Xaeej3J17KgxEQdd8B0bpNJJR+u3eH5UCGxc3K5jsBRA6tyRxtaGoJDjiMlG+/BuznMiMxMPQd1QLAsHKvNCXJbqvNgMUCbB1NIwmE25dbpc6b8iDyfd3JFegob5XIPcJcwGQM2FqV7GbMpsKKX/4v8fBoUxkbnDLCRSpP8dPCx0P1hMPNDjGVu+qKkd95SkDagJjyXNjarU4qpb0qyjlhCSJxKZkOxgQiwHVeEiUvty9m1UuTut2hAq+F+GJZOKnlMwVsnN/gsQYFRYPBg3lkXUOHcWmaocbxlDHhAdokVpd+9t9gWZeGQDFXbaEKZ0xsUlw92N3GFA3FF3bAIpFjZpiy2iaIcP+gGWKYcUoUcZGHMd8krFT7wtsDuPjZ6t7YPCZSgHGrSrco32JoirCbOBrKy0UN07F25jSZuVqBHcvPTzZQbdcPVaT+Hlzvti0LGR1oJOqroOaOh+xZ/redBolzFybUAdlOGH3Hxv+z3E3LlGwNhnHvPjhOwd7bF2aHTkTJdRH73RuQUKj+oYJtfayp+tXIMe+W/p3hWJa6yo3/yLd3OAJwb1AdNkZad/EzVxxOnnkM6Q/Z8Ya7dtVnSD1mzL4YCmOV7td+EdMlQN5hCKOIs8ptyDgIIVW39Fl+65+IeawoXffsVK7gkTtrj/VDgFmgWQ5H4OfITGJE7U0PTGXKZ0+x7x1qBa+8GydRxb/tg/7AdFCxi6c7L2gMivbSPfBKaLfl38zX1DlQfl3LnayoLbkGou7vrDpJxYJykzoI7SLeRDzRensnnP3Y/eaMEr5Qe1uREaQ+2KJJtsKEoCItBBD5ZvUAQa7aso9Y2a+zLhxLAuAl6RwMuuNtx8b8SNDzhrHhF33HJ5PaA524WMTYWaZcVtpP1eDXJQLnmh6y/8nH8DSdVRadQDOWTl3ZcqPSAdDA",
+              "device_id": "CZZUVFAUEC",
+              "m.relates_to": {
+                "m.in_reply_to": {
+                  "event_id": "${'$'}cDsT8PT_QbM2uJP_KuVZbQGtcY0wbqg1mHGcOL8Fv6c"
+                }
+              },
+              "sender_key": "9LC7rMDpTN0toYdzNgN81SeJjJSBgAoca4SMSdXGtlI",
+              "session_id": "izBsv0XNclqcbbxdsJMXzuFmZsukmYFCAENp4RbOL0g"
+            }
+        """
+        val eventResponse = """ { "event_id": "event345" } """
+        testApplication {
+            proxyWithClientServerRoutes(defaultConfig(httpClient = client))
+            homeserverWithRouting {
+                put(reactionEndpoint) {
+                    call.respondText(contentType = Json, status = OK, text = eventResponse)
+                }
+            }
+
+            val response =
+                client.put(reactionEndpoint) {
+                    contentType(Json)
+                    accept(Json)
+                    setBody(requestBody)
+                }
+
+            assertSoftly {
+                response shouldHaveStatus OK
+                response.bodyAsText() shouldEqualJson eventResponse
+            }
         }
     }
 

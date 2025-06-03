@@ -26,7 +26,7 @@ import io.ktor.http.contentType
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import mu.KotlinLogging
-import java.net.URL
+import java.net.URI
 
 private val log = KotlinLogging.logger { }
 
@@ -40,7 +40,7 @@ class VZDPublicIDCheckImpl(
     private val regServiceConfig: ProxyConfiguration.RegistrationServiceConfiguration
     ) : VZDPublicIDCheck {
     override suspend fun areMXIDsPublic(inviter: String, invited: String): Boolean {
-        val invitePermissionUrl = URL(
+        val invitePermissionUrl = URI(
             regServiceConfig.baseUrl + ":" + regServiceConfig.servicePort + regServiceConfig.invitePermissionCheckEndpoint
         ).toString()
 

@@ -22,6 +22,7 @@ import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.util.customMatrixServer
+import de.akquinet.tim.proxy.validation.SendMessageValidationService
 import io.kotest.assertions.assertSoftly
 import io.kotest.assertions.ktor.client.shouldHaveHeader
 import io.kotest.assertions.ktor.client.shouldHaveStatus
@@ -81,7 +82,8 @@ class InboundClientRoutesSSORedirectTest : ShouldSpec({
             httpClient = client,
             rawDataService = rawDataService,
             berechtigungsstufeEinsService = bsEinsService,
-            regServiceConfig = regServiceConfig
+            regServiceConfig = regServiceConfig,
+            sendMessageValidationService = SendMessageValidationService(),
         )
 
         customMatrixServer(Json) {

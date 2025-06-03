@@ -38,6 +38,7 @@ import de.akquinet.tim.proxy.logging.LogLevelService
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.tiMessengerInformation.TiMessengerInformationApi
+import de.akquinet.tim.proxy.validation.SendMessageValidationService
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -131,6 +132,7 @@ private fun initiateKoin(config: ProxyConfiguration) = koinApplication {
             singleOf(::ContactManagementApiImpl).bind<ContactManagementApi>()
             singleOf(::BerechtigungsstufeEinsService) { bind<BerechtigungsstufeEinsService>() }
             singleOf(::TiMessengerInformationApi) { bind<TiMessengerInformationApi>() }
+            singleOf(::SendMessageValidationService) { bind<SendMessageValidationService>() }
         })
 }.koin
 

@@ -23,6 +23,7 @@ import de.akquinet.tim.proxy.federation.FederationList
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.util.customMatrixServer
+import de.akquinet.tim.proxy.validation.SendMessageValidationService
 import io.kotest.assertions.assertSoftly
 import io.kotest.assertions.json.shouldEqualJson
 import io.kotest.assertions.ktor.client.shouldHaveStatus
@@ -112,7 +113,8 @@ class InboundClientRoutesTest : ShouldSpec({
             httpClient = client,
             rawDataService = rawDataService,
             berechtigungsstufeEinsService = bsEinsService,
-            regServiceConfig = regServiceConfig
+            regServiceConfig = regServiceConfig,
+            sendMessageValidationService = SendMessageValidationService(),
         )
 
         customMatrixServer(Json) {

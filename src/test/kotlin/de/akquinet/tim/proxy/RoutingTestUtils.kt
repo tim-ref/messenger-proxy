@@ -25,6 +25,7 @@ import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.RawDataServiceStub
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.util.installCustomMatrixApiServer
+import de.akquinet.tim.proxy.validation.SendMessageValidationService
 import io.ktor.client.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -115,7 +116,8 @@ fun defaultConfig(
     httpClient,
     rawDataService,
     berechtigungsstufeEinsService,
-    regServiceConfig
+    regServiceConfig,
+    SendMessageValidationService(),
 )
 
 /**

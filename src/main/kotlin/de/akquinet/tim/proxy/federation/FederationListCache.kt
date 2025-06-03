@@ -85,11 +85,17 @@ class FederationListCacheImpl(
 
 
     override suspend fun requestFile(version: String?): RequestFileResult<FederationList> {
-        val federationListUrl = URI(
-            regServiceConfig.baseUrl + ":" + regServiceConfig.servicePort + regServiceConfig.federationListEndpoint
-        ).toURL().toString()
+        val (baseUrl, servicePort, _, federationListEndpoint) = regServiceConfig
+        val federationListUrl = URI("$baseUrl:$servicePort$federationListEndpoint").toURL().toString()
 
-        val response = httpClient.get(federationListUrl) {}
+        val response = httpClient.get(federationListUrl) {
+            url {
+                if (version != null) {
+                    parameters.append("version", version)
+                }
+            }
+        }
+
         return when (val status = response.status) {
             HttpStatusCode.OK -> {
                 val content = response.bodyAsText()

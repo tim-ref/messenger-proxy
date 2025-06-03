@@ -15,6 +15,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 -->
 
+## [0.8.2] (published on 2025-06-03)
+
+### Fixed
+
+- Any fetched federation list will be ignored if it has the same version as the currently saved one.
+- Corrected handling of reaction messages containing text instead of emoji.
+
+## [0.8.1] (published on 2025-04-28)
+
+### Fixed
+
+- Use streaming for all media requests.  
+
 ## [0.8.0] (published on 2025-04-09)
 
 ### Added
