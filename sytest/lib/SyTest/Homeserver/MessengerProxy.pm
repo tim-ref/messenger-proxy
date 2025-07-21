@@ -1,5 +1,5 @@
 #
-# Modified by akquinet GmbH on 28.02.2025
+# Modified by akquinet GmbH on 02.06.2025
 #
 # Originally from https://github.com/matrix-org/sytest
 #
@@ -492,6 +492,10 @@ server {
         timAuthorizationCheckConfiguration => {
           concept => "CLIENT",
           inviteRejectionPolicy => "ALLOW_ALL"
+        },
+        httpClientConfig => {
+            maxRequests => 200,
+            maxRequestsPerHost => 200
         }
     });
 

@@ -82,3 +82,10 @@ logLevelResetConfig:
 timAuthorizationCheckConfiguration:
   concept: ${TIM_AUTHORIZATION_CHECK_CONCEPT:-PROXY} # [PROXY, CLIENT]
   inviteRejectionPolicy: ${INVITE_REJECTION_POLICY:-ALLOW_ALL} # [ALLOW_ALL, BLOCK_ALL]
+
+httpClientConfig:
+  # default: 64
+  maxRequests: ${HTTP_CLIENT_CONFIG_MAX_REQUESTS:-200}
+  # default: 5
+  # cave: this includes concurrent waiting sync requests, so 5 is way too low for our use-case.
+  maxRequestsPerHost: ${HTTP_CLIENT_CONFIG_MAX_REQUESTS_PER_HOST:-200}

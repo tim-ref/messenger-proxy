@@ -30,6 +30,7 @@ data class ProxyConfiguration(
     val logLevelResetConfig: LogLevelResetConfiguration,
     val timAuthorizationCheckConfiguration: TimAuthorizationCheckConfiguration,
     val tiMessengerInformationConfiguration: TiMessengerInformationConfiguration,
+    val httpClientConfig: HttpClientConfig,
 ) {
     data class FederationListCacheConfiguration(
         val baseDirectory: String,
@@ -108,6 +109,11 @@ data class ProxyConfiguration(
 
     data class TiMessengerInformationConfiguration(
         val port: Int,
+    )
+
+    data class HttpClientConfig(
+        val maxRequests: Int = 200, 
+        val maxRequestsPerHost: Int = 200,
     )
 }
 

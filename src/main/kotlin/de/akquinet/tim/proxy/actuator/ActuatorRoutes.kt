@@ -17,18 +17,23 @@ package de.akquinet.tim.proxy.actuator
 
 import ch.qos.logback.classic.Level
 import de.akquinet.tim.proxy.ProxyConfiguration
-import de.akquinet.tim.proxy.availability.RegistrationServiceHealthApi
 import de.akquinet.tim.proxy.logging.LogLevelService
 import de.akquinet.tim.proxy.util.metricsModule
-import io.ktor.client.*
-import io.ktor.client.request.*
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.engine.*
-import io.ktor.server.netty.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
-import io.ktor.util.pipeline.*
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.call
+import io.ktor.server.engine.ApplicationEngine
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.netty.Netty
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.get
+import io.ktor.server.routing.put
+import io.ktor.server.routing.routing
+import io.ktor.util.pipeline.PipelineContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -48,8 +53,7 @@ data class HealthLivenessResponse(
 
 @Serializable
 data class HealthReadinessResponse(
-    val database: Boolean,
-    val registrationService: Boolean
+    val database: Boolean
 )
 
 class ActuatorRoutesImpl(
@@ -57,7 +61,6 @@ class ActuatorRoutesImpl(
     private val inboundProxyConfig: ProxyConfiguration.InboundProxyConfiguration,
     private val outboundProxyConfig: ProxyConfiguration.OutboundProxyConfiguration,
     private val logLevelService: LogLevelService,
-    private val registrationServiceHealthApi: RegistrationServiceHealthApi,
     private val httpClient: HttpClient
 ) : ActuatorRoutes {
     override suspend fun start(): ApplicationEngine =
@@ -127,25 +130,19 @@ class ActuatorRoutesImpl(
         val isConnectedToDatabase = transaction {
             try {
                 !connection.isClosed
-            } catch (e: SQLException) {
+            } catch (_: SQLException) {
                 false
             }
         }
 
-        val registrationServiceResponse = registrationServiceHealthApi.getReadinessState()
-
         // create response body
         val readinessResponse = HealthReadinessResponse(
-            registrationService = registrationServiceResponse.status == HttpStatusCode.OK,
             database = isConnectedToDatabase
         )
 
         // calculate status
         val responseStatus: HttpStatusCode =
-            if (isConnectedToDatabase && setOf(
-                    registrationServiceResponse.status,
-                ).containsOnly(HttpStatusCode.OK)
-            ) {
+            if (isConnectedToDatabase) {
                 HttpStatusCode.OK
             } else {
                 HttpStatusCode.ServiceUnavailable

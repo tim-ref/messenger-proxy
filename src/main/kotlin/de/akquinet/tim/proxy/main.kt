@@ -20,7 +20,6 @@ import com.sksamuel.hoplite.addResourceOrFileSource
 import com.sksamuel.hoplite.yaml.YamlParser
 import de.akquinet.tim.proxy.actuator.ActuatorRoutes
 import de.akquinet.tim.proxy.actuator.ActuatorRoutesImpl
-import de.akquinet.tim.proxy.availability.RegistrationServiceHealthApi
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.*
 import de.akquinet.tim.proxy.contactmgmt.ContactManagementApi
@@ -43,6 +42,7 @@ import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
+import mu.KotlinLogging
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import net.folivo.trixnity.api.client.MatrixApiClient
@@ -61,6 +61,10 @@ import java.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
+import okhttp3.Dispatcher
+import okio.SYSTEM
+
+private val klogger = KotlinLogging.logger {}
 
 suspend fun main(): Unit = coroutineScope {
     // BC providers required for certificates and TLS cipher suites using brainpool curves
@@ -98,11 +102,12 @@ private fun initiateKoin(config: ProxyConfiguration) = koinApplication {
             single { config.logLevelResetConfig }
             single { config.timAuthorizationCheckConfiguration }
             single { config.tiMessengerInformationConfiguration }
+            single { config.httpClientConfig }
             single { FileSystem.SYSTEM }
 
             configureDatabase(config)
 
-            val generalHttpClient = createGeneralHttpClient()
+            val generalHttpClient = createGeneralHttpClient(config)
             InterceptorInstaller(generalHttpClient).install()
 
             single { generalHttpClient }
@@ -113,7 +118,6 @@ private fun initiateKoin(config: ProxyConfiguration) = koinApplication {
 
             singleOf(::MatrixOpenIdClient).bind()
             singleOf(::LogLevelService).bind()
-            singleOf(::RegistrationServiceHealthApi).bind()
             singleOf(::ContactRoutesImpl).bind<ContactRoutes>()
             singleOf(::ContactManagementServiceImpl).bind<ContactManagementService>()
             singleOf(::MatrixAuthorizationServiceImpl).bind<MatrixAuthorizationService>()
@@ -136,7 +140,7 @@ private fun initiateKoin(config: ProxyConfiguration) = koinApplication {
         })
 }.koin
 
-private fun createGeneralHttpClient(): HttpClient {
+private fun createGeneralHttpClient(config: ProxyConfiguration): HttpClient {
     val generalHttpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) {
             json()
@@ -147,7 +151,16 @@ private fun createGeneralHttpClient(): HttpClient {
                 connectTimeout(30.seconds.toJavaDuration())
                 readTimeout(2.minutes.toJavaDuration())
                 callTimeout(Duration.ZERO) // disables call timeout
+                dispatcher(
+                    Dispatcher().apply {
+                        maxRequests = config.httpClientConfig.maxRequests
+                        maxRequestsPerHost = config.httpClientConfig.maxRequestsPerHost
+                    }
+                )
             }
+        }
+        klogger.info {
+            "Setup of module HttpClient finished. maxRequest=${config.httpClientConfig.maxRequests} maxRequestsPerHost=${config.httpClientConfig.maxRequestsPerHost}"
         }
     }
     return generalHttpClient

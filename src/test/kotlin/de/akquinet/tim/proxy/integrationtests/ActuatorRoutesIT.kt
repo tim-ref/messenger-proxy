@@ -17,7 +17,6 @@ package de.akquinet.tim.proxy.integrationtests
 
 import de.akquinet.tim.proxy.*
 import de.akquinet.tim.proxy.actuator.ActuatorRoutesImpl
-import de.akquinet.tim.proxy.availability.RegistrationServiceHealthApi
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
@@ -92,9 +91,6 @@ class ActuatorRoutesIT {
         logLevelResetDelayInSeconds = 5,
         resetLogLevel = Level.INFO.name
     )
-
-    private val regServiceHealthMockEngine = RegistrationServiceHealthApiMockEngine()
-    private val regServiceHealthApi = RegistrationServiceHealthApi(regServiceHealthMockEngine.get(), regServerConfig)
 
     private lateinit var bsEinsService: BerechtigungsstufeEinsService
     private lateinit var outboundApplicationEngine: ApplicationEngine
@@ -198,7 +194,6 @@ class ActuatorRoutesIT {
                 inboundProxyConfig = inboundProxyConfig,
                 outboundProxyConfig = outboundProxyConfig,
                 logLevelService = LogLevelService(logLevelResetConfiguration),
-                registrationServiceHealthApi = regServiceHealthApi,
                 httpClient = httpClient
             ).start()
     }

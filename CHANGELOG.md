@@ -15,6 +15,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 -->
 
+## [0.8.3] (published on 2025-07-021)
+
+### Changed
+
+- Increase performance for mutliple parallel client connections.
+- Removed readiness check for registration service.
+
 ## [0.8.2] (published on 2025-06-03)
 
 ### Fixed
