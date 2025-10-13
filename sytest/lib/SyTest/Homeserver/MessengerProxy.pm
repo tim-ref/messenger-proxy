@@ -349,6 +349,11 @@ sub start {
             default_batch_size            => 100,
         },
 
+        experimental_features                               => {
+            msc2697_enabled => JSON::false,
+            msc3814_enabled => JSON::true,
+        },
+
         ### DISCLAIMER: From this point on these are necessary properties from the               ###
         ### original Sytest project which are not reflected from the productive homeserver.yaml  ###
 

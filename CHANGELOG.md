@@ -15,7 +15,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 -->
 
-## [0.8.3] (published on 2025-07-021)
+## [0.9.0] (published on 2025-10-13)
+
+### Added
+
+- Introduce experimental feature MSC3814 - Dehydrated Devices
+
+### Fixed
+
+- Corrected emoji (❤️) validation for reaction events.
+
+## [0.8.3] (published on 2025-07-21)
 
 ### Changed
 

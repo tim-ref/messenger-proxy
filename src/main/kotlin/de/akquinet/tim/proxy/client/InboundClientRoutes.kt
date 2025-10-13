@@ -23,16 +23,20 @@ import de.akquinet.tim.proxy.ProxyConfiguration
 import de.akquinet.tim.proxy.ProxyConfiguration.TimAuthorizationCheckConfiguration
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.model.route.ChangeVisibilityAppServiceRoom
+import de.akquinet.tim.proxy.client.model.route.DeleteDehydratedDevice
 import de.akquinet.tim.proxy.client.model.route.DownloadMediaWithFilename
 import de.akquinet.tim.proxy.client.model.route.DownloadMediaWithFilenameLegacy
 import de.akquinet.tim.proxy.client.model.route.DownloadThumbnailLegacyWithOptionalMethod
 import de.akquinet.tim.proxy.client.model.route.DownloadThumbnailWithOptionalMethod
 import de.akquinet.tim.proxy.client.model.route.EventsR0
+import de.akquinet.tim.proxy.client.model.route.GetDehydratedDevice
+import de.akquinet.tim.proxy.client.model.route.GetDehydratedDeviceEvents
 import de.akquinet.tim.proxy.client.model.route.GetDirectoryVisibility
 import de.akquinet.tim.proxy.client.model.route.GetEmailRequestTokenFor3Pid
 import de.akquinet.tim.proxy.client.model.route.GetPublicRooms
 import de.akquinet.tim.proxy.client.model.route.GetThirdPartyProtocols
 import de.akquinet.tim.proxy.client.model.route.RoomJoin
+import de.akquinet.tim.proxy.client.model.route.SetDehydratedDevice
 import de.akquinet.tim.proxy.client.model.route.SsoCallback
 import de.akquinet.tim.proxy.client.model.route.account_data.AccountDataType
 import de.akquinet.tim.proxy.client.model.route.account_data.asPermissionConfig
@@ -300,6 +304,13 @@ class InboundClientRoutesImpl(
 
         // devices
         devicesRoutes()
+
+        // dehydrated device
+        // TODO: These should be replaced if a future version of the SDK supports them natively.
+        forwardEndpoint<DeleteDehydratedDevice>()
+        forwardEndpoint<GetDehydratedDevice>()
+        forwardEndpoint<GetDehydratedDeviceEvents>()
+        forwardEndpoint<SetDehydratedDevice>()
 
         // discovery
         discoveryRoute()

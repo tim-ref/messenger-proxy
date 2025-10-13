@@ -284,3 +284,6 @@ background_updates:
   sleep_duration_ms: 1000
   min_batch_size: 1
   default_batch_size: 100
+experimental_features:
+  msc2697_enabled: false
+  msc3814_enabled: true

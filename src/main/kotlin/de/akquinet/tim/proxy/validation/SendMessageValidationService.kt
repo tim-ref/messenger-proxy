@@ -55,11 +55,11 @@ class SendMessageValidationService {
         val relatesTo: JsonObject? = request["m.relates_to"]?.jsonObject
 
         val key = relatesTo?.get("key")?.jsonPrimitive?.contentOrNull
-        if (key == null || key.isBlank()) {
+        if (key.isNullOrBlank()) {
             SendMessageIsValid
         } else {
             ensure(EmojiParser.extractEmojis(key).size == 1) { InvalidKeyLength }
-            ensure(EmojiParser.removeAllEmojis(key).isEmpty()) { KeyMustOnlyContainEmoji }
+            ensure(key.none { it.isLetterOrDigit() || it.isWhitespace() }) { KeyMustOnlyContainEmoji }
 
             val relType = relatesTo["rel_type"]?.jsonPrimitive?.contentOrNull
             ensure(relType == "m.annotation") { InvalidRelationType }

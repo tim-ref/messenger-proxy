@@ -100,6 +100,18 @@ class SendMessageValidationServiceTest : ShouldSpec({
                     }"""
                 validator.validateSendMessage(requestBody, "m.room.encrypted") shouldBeRight SendMessageIsValid
             }
+
+            should("succeed with ❤\uFE0F emoji") {
+                val requestBody = """{
+                                        "m.relates_to": {
+                                            "event_id":"event123",
+                                            "rel_type":"m.annotation",
+                                            "key":"❤️"
+                                        }
+                                    }"""
+                validator.validateSendMessage(requestBody, "m.reaction") shouldBeRight SendMessageIsValid
+            }
+
         }
     }
 })

@@ -384,6 +384,82 @@ class InboundClientRoutesTest : ShouldSpec({
         }
     }
 
+
+    // A_26574 - Entschlüsseln von Nachrichten nach Wiederanmeldung
+    // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.2/#A_26574
+    // A_26575 - Ablage von Schlüsseln zum Entschlüsseln von Nachrichten nach Wiederanmeldung
+    // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.2/#A_26575
+    // Weiterleiten der notwendigen Routen für MSC3814 - Dehydrated Devices
+    context("support dehydrated devices") {
+
+        should("forward request to get Dehydrated Device") {
+            testApplication {
+                val client = createClient { install(ContentNegotiation) { json() } }
+                application { testModule(client) }
+                homeserverWithRouting {
+                    get("/_matrix/client/unstable/org.matrix.msc3814.v1/dehydrated_device") {
+                        call.respond(OK, "blimey")
+                    }
+                }
+
+                val response = client.get("/_matrix/client/unstable/org.matrix.msc3814.v1/dehydrated_device")
+
+                response shouldHaveStatus OK
+                response.bodyAsText() shouldBe "blimey"
+            }
+        }
+
+        should("forward request to get Dehydrated Device events") {
+            testApplication {
+                val client = createClient { install(ContentNegotiation) { json() } }
+                application { testModule(client) }
+                homeserverWithRouting {
+                    post("/_matrix/client/unstable/org.matrix.msc3814.v1/dehydrated_device/1/events") {
+                        call.respond(OK, "blimey")
+                    }
+                }
+
+                val response = client.post("/_matrix/client/unstable/org.matrix.msc3814.v1/dehydrated_device/1/events")
+
+                response shouldHaveStatus OK
+                response.bodyAsText() shouldBe "blimey"
+            }
+        }
+
+        should("forward request to create Dehydrated Device") {
+            testApplication {
+                val client = createClient { install(ContentNegotiation) { json() } }
+                application { testModule(client) }
+                homeserverWithRouting {
+                    put("/_matrix/client/unstable/org.matrix.msc3814.v1/dehydrated_device") {
+                        call.respond(OK, "blimey")
+                    }
+                }
+
+                val response = client.put("/_matrix/client/unstable/org.matrix.msc3814.v1/dehydrated_device")
+
+                response shouldHaveStatus OK
+                response.bodyAsText() shouldBe "blimey"
+            }
+        }
+
+        should("forward request to delete Dehydrated Device") {
+            testApplication {
+                val client = createClient { install(ContentNegotiation) { json() } }
+                application { testModule(client) }
+                homeserverWithRouting {
+                    delete("/_matrix/client/unstable/org.matrix.msc3814.v1/dehydrated_device") {
+                        call.respond(OK, "blimey")
+                    }
+                }
+
+                val response = client.delete("/_matrix/client/unstable/org.matrix.msc3814.v1/dehydrated_device")
+
+                response shouldHaveStatus OK
+                response.bodyAsText() shouldBe "blimey"
+            }
+        }
+    }
 })
 
 fun ApplicationTestBuilder.homeserverWithRouting(configuration: Routing.() -> Unit) {
