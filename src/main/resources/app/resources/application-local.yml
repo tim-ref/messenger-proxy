@@ -89,3 +89,10 @@ httpClientConfig:
   # default: 5
   # cave: this includes concurrent waiting sync requests, so 5 is way too low for our use-case.
   maxRequestsPerHost: 200
+
+synapse:
+  adminApi:
+    matrixDomain: synapse
+    baseUrl: http://localhost:8083
+    username: admin
+    password: admin

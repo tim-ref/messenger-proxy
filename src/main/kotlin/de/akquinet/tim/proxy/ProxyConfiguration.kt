@@ -15,6 +15,7 @@
  */
 package de.akquinet.tim.proxy
 
+import de.akquinet.tim.proxy.config.SynapseConnectionConfig
 import kotlin.time.Duration
 
 data class ProxyConfiguration(
@@ -31,6 +32,7 @@ data class ProxyConfiguration(
     val timAuthorizationCheckConfiguration: TimAuthorizationCheckConfiguration,
     val tiMessengerInformationConfiguration: TiMessengerInformationConfiguration,
     val httpClientConfig: HttpClientConfig,
+    val synapse: SynapseConnectionConfig,
 ) {
     data class FederationListCacheConfiguration(
         val baseDirectory: String,

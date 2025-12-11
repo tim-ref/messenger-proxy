@@ -10,7 +10,7 @@
 
     <groupId>de.akquinet.timref.fachdienst.messenger-proxy</groupId>
     <artifactId>mp-backend</artifactId>
-    <version>0.9.0</version>
+    <version>0.10.0</version>
 
     <name>Messenger-Proxy</name>
     <description>Messenger-Proxy für die TIM Referenzimplementierung</description>
@@ -161,6 +161,10 @@
         <dependency>
             <groupId>io.ktor</groupId>
             <artifactId>ktor-client-content-negotiation-jvm</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.ktor</groupId>
+            <artifactId>ktor-client-resources-jvm</artifactId>
         </dependency>
         <dependency>
             <groupId>io.ktor</groupId>
@@ -965,7 +969,7 @@
     <scm>
         <connection>${env.CI_SCM_CONNECTION}</connection>
         <developerConnection>${env.CI_SCM_DEVELOPER_CONNECTION}</developerConnection>
-        <tag>0.9.0</tag>
+        <tag>0.10.0</tag>
         <url>${env.CI_SCM_URL}</url>
     </scm>
 </project>

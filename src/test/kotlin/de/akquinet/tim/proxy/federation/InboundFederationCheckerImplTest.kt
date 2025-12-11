@@ -15,6 +15,7 @@
  */
 package de.akquinet.tim.proxy.federation
 
+import com.sksamuel.hoplite.Secret
 import de.akquinet.tim.ErrorResponse
 import de.akquinet.tim.proxy.InviteRejectionPolicy
 import de.akquinet.tim.proxy.ProxyConfiguration
@@ -22,12 +23,22 @@ import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
+import de.akquinet.tim.proxy.config.SynapseClientConfig
+import de.akquinet.tim.proxy.federation.testutils.getEventAuthenticated
+import de.akquinet.tim.proxy.federation.testutils.makeJoin
+import de.akquinet.tim.proxy.federation.testutils.matrixAuthorizationHeader
+import de.akquinet.tim.proxy.federation.testutils.postKeyClaimAuthenticated
+import de.akquinet.tim.proxy.federation.testutils.putInvite
+import de.akquinet.tim.proxy.federation.testutils.sendJoin
 import de.akquinet.tim.proxy.mocks.ContactManagementStub
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.VZDPublicIDCheckMock
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.rawdata.model.RawDataMetaData
+import de.akquinet.tim.proxy.synapse.SynapseService
+import de.akquinet.tim.proxy.synapse.client.SynapseClient
 import de.akquinet.tim.proxy.util.customMatrixServer
+import de.akquinet.tim.proxy.validation.A26515ValidationService
 import de.akquinet.tim.shouldEqualJsonMatrixStandard
 import io.kotest.assertions.assertSoftly
 import io.kotest.assertions.json.shouldEqualJson
@@ -35,30 +46,41 @@ import io.kotest.assertions.ktor.client.shouldHaveStatus
 import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeTypeOf
-import io.ktor.client.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.delete
+import io.ktor.client.request.get
+import io.ktor.client.request.patch
+import io.ktor.client.request.post
+import io.ktor.client.request.put
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType.Application
-import io.ktor.http.HttpHeaders.Authorization
 import io.ktor.http.HttpStatusCode.Companion.Forbidden
 import io.ktor.http.HttpStatusCode.Companion.MethodNotAllowed
 import io.ktor.http.HttpStatusCode.Companion.NotFound
 import io.ktor.http.HttpStatusCode.Companion.OK
 import io.ktor.http.HttpStatusCode.Companion.Unauthorized
-import io.ktor.serialization.kotlinx.json.*
-import io.ktor.server.application.*
-import io.ktor.server.auth.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
-import io.ktor.server.testing.*
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.application.call
+import io.ktor.server.application.install
+import io.ktor.server.auth.Authentication
+import io.ktor.server.auth.authenticate
+import io.ktor.server.plugins.BadRequestException
+import io.ktor.server.request.contentType
+import io.ktor.server.request.receiveText
+import io.ktor.server.request.uri
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import io.ktor.server.routing.put
+import io.ktor.server.routing.routing
+import io.ktor.server.testing.ApplicationTestBuilder
+import io.ktor.server.testing.testApplication
 import io.mockk.spyk
+import kotlin.time.Duration.Companion.hours
 import kotlinx.serialization.json.Json
 import net.folivo.trixnity.api.client.MatrixApiClient
 import net.folivo.trixnity.clientserverapi.server.matrixAccessTokenAuth
-import kotlin.time.Duration.Companion.hours
+import net.folivo.trixnity.core.model.RoomId
 
 class InboundFederationCheckerImplTest : ShouldSpec({
     val destinationUrl = "https://internal-matrix-server:8090"
@@ -84,6 +106,13 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         "MP-1",
         "home.de"
     )
+    val synapseClientConfig =
+        SynapseClientConfig(
+            matrixDomain = "internal-matrix-server",
+            baseUrl = destinationUrl,
+            username = Secret("username"),
+            password = Secret("password"),
+        )
     lateinit var rawDataService: RawDataServiceImpl
     val contactManagementService = ContactManagementStub()
     val vzdPublicMock = VZDPublicIDCheckMock()
@@ -111,9 +140,9 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                     {
                       "chunk": [
                         {
-                            "room_id": "publicRoom:myServer.com",
-                            "name": "publicRoom",
-                            "canonical_alias": "#publicRoom:myServer.com",
+                            "room_id": "public:myServer.com",
+                            "name": "public",
+                            "canonical_alias": "#public:myServer.com",
                             "num_joined_members": 2,
                             "world_readable": false,
                             "guest_can_join": false,
@@ -140,6 +169,17 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                     json()
                 }
             }
+
+            val synapseClient = SynapseClient(engine = client.engine, config = synapseClientConfig)
+
+            val synapseService =
+                SynapseService(
+                    synapseClient = synapseClient,
+                    config = synapseClientConfig,
+                )
+
+            val a26515ValidationService = A26515ValidationService(synapseService)
+
             rawDataService = spyk(RawDataServiceImpl(logInfoConfig, client))
 
             application {
@@ -172,6 +212,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                                 vzdPublicIDCheck = vzdPublicMock,
                                 timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
                                 berechtigungsstufeEinsService = bsEinsService,
+                                a26515ValidationService = a26515ValidationService,
                             )
                         ) {
                             serverServerApiRoutes()
@@ -210,6 +251,58 @@ class InboundFederationCheckerImplTest : ShouldSpec({
                                 text = publicRooms
                             )
                         }
+                        post("/_matrix/client/v3/login") {
+                            call.respondText(
+                                """
+              {
+                "access_token": "access token", 
+                "user_id": "@test-user:snpse.org"
+              }
+            """
+                                    .trimIndent(),
+                                Application.Json,
+                            )
+                        }
+                        get("/_synapse/admin/v1/rooms/{roomId}") {
+                            /// Use roomId opaqueId to choose joinRules setting
+                            val roomIdPathParam =
+                                call.parameters["roomId"] ?: throw BadRequestException("roomId is missing")
+                            val roomId =
+                                RoomId(roomIdPathParam)
+
+                            val joinRuleStrings = listOf("public", "knock", "restricted", "knock_restricted", "private")
+
+                            val joinRules =
+                                joinRuleStrings.firstOrNull { roomId.localpart.contains(it) } ?: "invite"
+
+                            call.respondText(
+                                """
+              {
+                "room_id": "$roomIdPathParam",
+                "name": "Music Theory",
+                "avatar": "mxc://matrix.org/AQDaVFlbkQoErdOgqWRgiGSV",
+                "topic": "Theory, Composition, Notation, Analysis",
+                "canonical_alias": "#musictheory:matrix.org",
+                "joined_members": 127,
+                "joined_local_members": 2,
+                "joined_local_devices": 2,
+                "version": "1",
+                "creator": "@foo:matrix.org",
+                "encryption": null,
+                "federatable": true,
+                "public": true,
+                "join_rules": "$joinRules",
+                "guest_access": null,
+                "history_visibility": "shared",
+                "state_events": 93534,
+                "room_type": "m.space",
+                "forgotten": false
+              }
+            """
+                                    .trimIndent(),
+                                Application.Json,
+                            )
+                        }
                     }
                 }
                 hosts(rawDataServiceUrl) {
@@ -225,26 +318,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         }
     }
 
-    fun HttpMessageBuilder.matrixAuthorizationHeader() {
-        header(
-            Authorization,
-            """X-Matrix origin="fed",destination="otherHost:80",key="ed25519:ABC",sig="signature""""
-        )
-    }
-
     context("authorization needed") {
-        suspend fun HttpClient.postKeyClaimAuthenticated() =
-            post("/_matrix/federation/v1/user/keys/claim?test=test") {
-                matrixAuthorizationHeader()
-                contentType(Application.Json)
-                setBody("""{"one_time_keys":{}}""")
-            }
-
-        suspend fun HttpClient.getEventAuthenticated() =
-            get("/_matrix/federation/v1/event/1234") {
-                matrixAuthorizationHeader()
-            }
-
         should("forward federated domain") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
@@ -398,49 +472,7 @@ class InboundFederationCheckerImplTest : ShouldSpec({
     }
 
     context("federation invite") {
-        suspend fun HttpClient.putInvite(sender: String, invited: String) =
-            put("/_matrix/federation/v2/invite/{roomId}/{eventId}") {
-                matrixAuthorizationHeader()
-                contentType(Application.Json)
-                setBody(
-                    """
-                    {
-                      "event": {
-                        "content": {
-                          "membership": "invite"
-                        },
-                        "origin": "matrix.org",
-                        "origin_server_ts": 1234567890,
-                        "sender": "$sender",
-                        "state_key": "$invited",
-                        "type": "m.room.member"
-                      },
-                      "invite_room_state": [
-                        {
-                          "content": {
-                            "name": "Example Room"
-                          },
-                          "sender": "@bob:example.org",
-                          "state_key": "",
-                          "type": "m.room.name"
-                        },
-                        {
-                          "content": {
-                            "join_rule": "invite"
-                          },
-                          "sender": "@bob:example.org",
-                          "state_key": "",
-                          "type": "m.room.join_rules"
-                        }
-                      ],
-                      "room_version": "2"
-                    }
-                """.trimIndent()
-                )
-            }
-
         // gemSpec_TI-Messenger-Dienst_V1.1.1, 3.5.2.2+: after federation check, check invite permission on proxy
-
         should("fail if neither contact nor FHIR entry if check on proxy") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
@@ -535,66 +567,61 @@ class InboundFederationCheckerImplTest : ShouldSpec({
         }
     }
 
-    context("join public rooms") {
-
-        suspend fun HttpClient.sendJoin(roomAlias: String) =
-            put("/_matrix/federation/v2/send_join/$roomAlias:myServer.com/1234") {
-                header(
-                    Authorization,
-                    """X-Matrix origin="fed",destination="myServer:80",key="ed25519:ABC",sig="signature""""
-                )
-                contentType(Application.Json)
-                setBody(
-                    """{
-                              "content": {
-                                "membership": "join"
-                              },
-                              "origin": "matrix.org",
-                              "origin_server_ts": 1234567890,
-                              "sender": "@someone:example.org",
-                              "state_key": "@someone:example.org",
-                              "type": "m.room.member"
-                            }""".trimIndent()
-                )
+    context("A_26520 - Öffentliche Räume Server-API") {
+        context("public room is listed on publicRooms (visibility: public)") {
+            should("fail, if user from other homeserver trys to join public room via make_join") {
+                withCut {
+                    federationListCacheMock.domains.value = setOf(
+                        insuranceDomainFed()
+                    )
+                    val response = client.makeJoin("public")
+                    response.status shouldBe Forbidden
+                    response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"Joining federated public rooms is forbidden"}"""
+                }
             }
 
-        suspend fun HttpClient.makeJoin() =
-            put("/_matrix/federation/v2/send_join/publicRoom:myServer.com/1234") {
-                header(
-                    Authorization,
-                    """X-Matrix origin="fed",destination="myServer:80",key="ed25519:ABC",sig="signature""""
-                )
-            }
-
-        should("fail, if user from other homeserver trys to join public room via send_join") {
-            withCut {
-                federationListCacheMock.domains.value = setOf(
-                    insuranceDomainFed()
-                )
-                val response = client.sendJoin("publicRoom")
-                response.status shouldBe Forbidden
-                response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"Cannot join public rooms owned by other home servers"}"""
+            should("fail, if user from other homeserver trys to join public room via send_join") {
+                withCut {
+                    federationListCacheMock.domains.value = setOf(
+                        insuranceDomainFed()
+                    )
+                    val response = client.sendJoin("public")
+                    response.status shouldBe Forbidden
+                    response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"Joining federated public rooms is forbidden"}"""
+                }
             }
         }
 
+        context("public room is not listed on publicRooms (visibility: private)") {
+            should("fail, if user from other homeserver trys join public room via make_join") {
+                withCut {
+                    federationListCacheMock.domains.value = setOf(
+                        insuranceDomainFed()
+                    )
+                    val response = client.makeJoin("publicInvisible")
+                    response.status shouldBe Forbidden
+                    response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"Joining federated public rooms is forbidden"}"""
+                }
+            }
+
+            should("fail, if user from other homeserver trys to join public room via send_join") {
+                withCut {
+                    federationListCacheMock.domains.value = setOf(
+                        insuranceDomainFed()
+                    )
+                    val response = client.sendJoin("publicInvisible")
+                    response.status shouldBe Forbidden
+                    response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"Joining federated public rooms is forbidden"}"""
+                }
+            }
+        }
         should("succeed if user from other homeserver trys to join a private room via invite") {
             withCut {
                 federationListCacheMock.domains.value = setOf(
                     insuranceDomainFed()
                 )
-                val response = client.sendJoin("privateRoom")
+                val response = client.sendJoin("private")
                 response.status shouldBe OK
-            }
-        }
-
-        should("fail, if user from other homeserver trys to join public room via make_join") {
-            withCut {
-                federationListCacheMock.domains.value = setOf(
-                    insuranceDomainFed()
-                )
-                val response = client.makeJoin()
-                response.status shouldBe Forbidden
-                response.bodyAsText() shouldBe """{"errcode":"M_FORBIDDEN","error":"Cannot join public rooms owned by other home servers"}"""
             }
         }
     }

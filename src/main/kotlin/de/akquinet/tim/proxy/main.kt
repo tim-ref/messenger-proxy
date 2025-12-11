@@ -20,34 +20,51 @@ import com.sksamuel.hoplite.addResourceOrFileSource
 import com.sksamuel.hoplite.yaml.YamlParser
 import de.akquinet.tim.proxy.actuator.ActuatorRoutes
 import de.akquinet.tim.proxy.actuator.ActuatorRoutesImpl
+import de.akquinet.tim.proxy.authorization.MatrixAuthorizationService
+import de.akquinet.tim.proxy.authorization.MatrixAuthorizationServiceImpl
+import de.akquinet.tim.proxy.authorization.MatrixOpenIdClient
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
-import de.akquinet.tim.proxy.client.*
+import de.akquinet.tim.proxy.client.AccessTokenToUserId
+import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunction
+import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
+import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
+import de.akquinet.tim.proxy.client.InboundClientRoutes
+import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
 import de.akquinet.tim.proxy.contactmgmt.ContactManagementApi
 import de.akquinet.tim.proxy.contactmgmt.ContactManagementApiImpl
 import de.akquinet.tim.proxy.contactmgmt.ContactRoutes
 import de.akquinet.tim.proxy.contactmgmt.ContactRoutesImpl
-import de.akquinet.tim.proxy.authorization.MatrixAuthorizationService
-import de.akquinet.tim.proxy.authorization.MatrixAuthorizationServiceImpl
-import de.akquinet.tim.proxy.authorization.MatrixOpenIdClient
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementServiceImpl
 import de.akquinet.tim.proxy.contactmgmt.database.DatabaseFactory
-import de.akquinet.tim.proxy.federation.*
+import de.akquinet.tim.proxy.federation.FederationListCache
+import de.akquinet.tim.proxy.federation.FederationListCacheImpl
+import de.akquinet.tim.proxy.federation.InboundFederationRoutes
+import de.akquinet.tim.proxy.federation.InboundFederationRoutesImpl
+import de.akquinet.tim.proxy.federation.OutboundFederationRoutes
+import de.akquinet.tim.proxy.federation.OutboundFederationRoutesImpl
 import de.akquinet.tim.proxy.logging.LogLevelService
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
+import de.akquinet.tim.proxy.synapse.SynapseService
+import de.akquinet.tim.proxy.synapse.client.SynapseClient
 import de.akquinet.tim.proxy.tiMessengerInformation.TiMessengerInformationApi
+import de.akquinet.tim.proxy.validation.A26515ValidationService
 import de.akquinet.tim.proxy.validation.SendMessageValidationService
-import io.ktor.client.*
-import io.ktor.client.engine.okhttp.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.serialization.kotlinx.json.*
-import mu.KotlinLogging
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.serialization.kotlinx.json.json
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.toJavaDuration
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import mu.KotlinLogging
 import net.folivo.trixnity.api.client.MatrixApiClient
 import net.folivo.trixnity.core.serialization.createDefaultEventContentSerializerMappings
 import net.folivo.trixnity.core.serialization.createMatrixEventJson
+import okhttp3.Dispatcher
 import okio.FileSystem
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider
@@ -58,11 +75,6 @@ import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import java.security.Security
 import java.time.Duration
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.toJavaDuration
-import okhttp3.Dispatcher
-import okio.SYSTEM
 
 private val klogger = KotlinLogging.logger {}
 
@@ -103,6 +115,7 @@ private fun initiateKoin(config: ProxyConfiguration) = koinApplication {
             single { config.timAuthorizationCheckConfiguration }
             single { config.tiMessengerInformationConfiguration }
             single { config.httpClientConfig }
+            single { config.synapse.adminApi }
             single { FileSystem.SYSTEM }
 
             configureDatabase(config)
@@ -137,6 +150,9 @@ private fun initiateKoin(config: ProxyConfiguration) = koinApplication {
             singleOf(::BerechtigungsstufeEinsService) { bind<BerechtigungsstufeEinsService>() }
             singleOf(::TiMessengerInformationApi) { bind<TiMessengerInformationApi>() }
             singleOf(::SendMessageValidationService) { bind<SendMessageValidationService>() }
+            singleOf(::SynapseClient) { bind<SynapseClient>() }
+            singleOf(::SynapseService) { bind<SynapseService>() }
+            singleOf(::A26515ValidationService) { bind<A26515ValidationService>() }
         })
 }.koin
 

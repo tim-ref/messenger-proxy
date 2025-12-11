@@ -501,7 +501,15 @@ server {
         httpClientConfig => {
             maxRequests => 200,
             maxRequestsPerHost => 200
-        }
+        },
+        synapse => {
+            adminApi => {
+                matrixDomain => "synapse",
+                baseUrl      => "http://$bind_host:$port",
+                username     => "admin",
+                password     => "admin",
+            },
+        },
     });
 
     $self->{paths}{log} = $log;

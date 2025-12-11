@@ -15,23 +15,31 @@
  */
 package de.akquinet.tim.proxy.federation
 
-import de.akquinet.tim.proxy.*
+import de.akquinet.tim.proxy.ProxyConfiguration
+import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
+import de.akquinet.tim.proxy.VZDPublicIDCheck
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
 import de.akquinet.tim.proxy.extensions.toUriFormat
 import de.akquinet.tim.proxy.federation.model.route.InviteRequestBodyCommon
 import de.akquinet.tim.proxy.federation.model.route.InviteV1
 import de.akquinet.tim.proxy.federation.model.route.SendJoinV1
+import de.akquinet.tim.proxy.forwardRequest
+import de.akquinet.tim.proxy.mergeToUrl
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.model.Operation
-import io.ktor.client.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
+import de.akquinet.tim.proxy.validation.A26515ValidationService
+import io.ktor.client.HttpClient
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.call
+import io.ktor.server.request.ApplicationRequest
+import io.ktor.server.request.receiveText
+import io.ktor.server.request.uri
+import io.ktor.server.response.respond
+import io.ktor.server.routing.Route
 import kotlinx.serialization.json.Json
 import mu.KotlinLogging
 import net.folivo.trixnity.api.server.matrixEndpointResource
@@ -40,11 +48,13 @@ import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.core.MatrixServerException
 import net.folivo.trixnity.core.model.RoomId
 import net.folivo.trixnity.core.model.UserId
-import net.folivo.trixnity.core.model.events.m.room.JoinRulesEventContent
 import net.folivo.trixnity.serverserverapi.model.discovery.GetWellKnown
-import net.folivo.trixnity.serverserverapi.model.federation.*
+import net.folivo.trixnity.serverserverapi.model.federation.GetEvent
+import net.folivo.trixnity.serverserverapi.model.federation.Invite
+import net.folivo.trixnity.serverserverapi.model.federation.MakeJoin
+import net.folivo.trixnity.serverserverapi.model.federation.SendJoin
 
-private val kLog = KotlinLogging.logger { }
+private val logger = KotlinLogging.logger { }
 
 interface InboundFederationRoutes : FederationRoutes
 
@@ -56,6 +66,7 @@ class InboundFederationRoutesImpl(
     private val vzdPublicIDCheck: VZDPublicIDCheck,
     private val timAuthorizationCheckConfiguration: ProxyConfiguration.TimAuthorizationCheckConfiguration,
     private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService,
+    private val a26515ValidationService: A26515ValidationService,
 ) : InboundFederationRoutes, FederationRoutesImpl(httpClient) {
 
     private val tolerantJson = Json {
@@ -77,7 +88,7 @@ class InboundFederationRoutesImpl(
         // TODO https://jira.spree.de/browse/TIMREF-1772: a better alternativ to turning off the feature completely would be to start a Nginx Server that mocks
         // the interface "/vzd/invite" of the registration service
         if (!config.enforceDomainList) {
-            kLog.info("Pass invite permission check, cause sytest is running")
+            logger.info("Pass invite permission check, cause sytest is running")
             forwardWithRawData<Invite>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER)
             forwardWithRawData<InviteV1>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER)
         } else {
@@ -91,39 +102,52 @@ class InboundFederationRoutesImpl(
             }
         }
 
-        matrixEndpointResource<MakeJoin> {
-            handleJoinRoom(call)
+        /**
+         * Implements checks for joining public rooms
+         *
+         * @see <a
+         *   href="https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Pro/gemSpec_TI-M_Pro_V1.0.2/#A_26515"
+         *   A_26515 - Öffentliche Räume beitreten</a>
+         */
+        if (!config.enforceDomainList) {
+            logger.info("Pass invite permission check, cause sytest is running")
+            forwardEndpoint<MakeJoin>()
+            forwardEndpoint<SendJoin>()
+            forwardEndpoint<SendJoinV1>()
+        } else {
+            matrixEndpointResource<MakeJoin> {
+                handleJoinRoom(call)
+            }
+            matrixEndpointResource<SendJoin> {
+                handleJoinRoom(call)
+            }
+            // SendJoinV1 is deprecated and this call should be removed in future versions
+            matrixEndpointResource<SendJoinV1> {
+                handleJoinRoom(call)
+            }
         }
-
-        matrixEndpointResource<SendJoin> {
-            handleJoinRoom(call)
-        }
-
-        // SendJoinV1 is deprecated and this call should be removed in future versions
-        matrixEndpointResource<SendJoinV1> {
-            handleJoinRoom(call)
-        }
-
     }
 
     private suspend fun handleJoinRoom(call: ApplicationCall) {
-        val roomId = call.parameters["roomId"]?.let { RoomId(it) }
-
-        val response = httpClient.get("${config.homeserverUrl}/_matrix/client/v3/publicRooms")
-
-        if (response.status == HttpStatusCode.OK) {
-            val body = tolerantJson.decodeFromString<GetPublicRoomsResponse>(response.bodyAsText())
-
-            val toJoinedRoom = body.chunk.find { c -> c.roomId == roomId }
-            if (toJoinedRoom?.joinRule == JoinRulesEventContent.JoinRule.Public) {
-                throw MatrixServerException(
-                    HttpStatusCode.Forbidden,
-                    ErrorResponse.Forbidden("Cannot join public rooms owned by other home servers")
+        val roomId = RoomId(call.parameters["roomId"]!!)
+        a26515ValidationService
+            .ensureSameHomeserverForPublicRoomJoin(roomId)
+            .onRight {
+                logger.debug { "Room $roomId can be joined from caller." }
+                forwardRequest(
+                    call = call,
+                    httpClient = httpClient,
+                    destinationUrl = call.request.getDestinationUrl(),
+                    bodyJson = null,
                 )
             }
-        }
-
-        forwardRequest(call, httpClient, call.request.getDestinationUrl(), null)
+            .onLeft { failure ->
+                logger.error { "Can't join room $roomId cause: ${ failure.message }" }
+                call.respond<ErrorResponse>(
+                    status = failure.httpStatusCode,
+                    message = failure.errorResponse,
+                )
+            }
     }
 
     private suspend fun handleInvite(call: ApplicationCall, checkBerechtigungsstufe23: Boolean) {
@@ -180,6 +204,11 @@ class InboundFederationRoutesImpl(
             invited = invitedUser.toUriFormat().full, inviter = inviter.toUriFormat().full
         )
     }
+
+    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpoint() =
+        matrixEndpointResource<ENDPOINT> {
+            forwardRequest(call, httpClient, call.request.getDestinationUrl(), null)
+        }
 
     private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardWithRawData(timOperation: Operation) =
         matrixEndpointResource<ENDPOINT> {

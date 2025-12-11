@@ -89,3 +89,10 @@ httpClientConfig:
   # default: 5
   # cave: this includes concurrent waiting sync requests, so 5 is way too low for our use-case.
   maxRequestsPerHost: ${HTTP_CLIENT_CONFIG_MAX_REQUESTS_PER_HOST:-200}
+
+synapse:
+  adminApi:
+    matrixDomain: ${homeFQDN}
+    baseUrl: ${HOMESERVER_URL}
+    username: ${TIM_SYNAPSE_ADMIN_MXID:-null}
+    password: ${TIM_SYNAPSE_ADMIN_PASSWORD:-null}

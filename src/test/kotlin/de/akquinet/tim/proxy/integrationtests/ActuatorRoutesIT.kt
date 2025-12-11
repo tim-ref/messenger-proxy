@@ -39,6 +39,7 @@ import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.server.engine.*
+import io.mockk.mockk
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
@@ -183,6 +184,7 @@ class ActuatorRoutesIT {
                     vzdPublicIDCheck = vzdPublicIDCheckMock,
                     timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
                     berechtigungsstufeEinsService = bsEinsService,
+                    a26515ValidationService = mockk(relaxed = true),
                 ),
                 httpClient = httpClient,
                 berechtigungsstufeEinsService = bsEinsService

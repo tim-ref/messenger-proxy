@@ -60,6 +60,7 @@ import io.ktor.server.engine.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.testing.*
+import io.mockk.mockk
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -171,7 +172,8 @@ class InboundProxyIT {
                     contactManagementService = contactManagementServiceMock,
                     vzdPublicIDCheck = vzdPublicIDCheckMock,
                     timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
-                    berechtigungsstufeEinsService = bsEinsService
+                    berechtigungsstufeEinsService = bsEinsService,
+                    a26515ValidationService = mockk(relaxed = true)
                 ),
                 httpClient = httpClient
             ).start()

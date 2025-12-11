@@ -14,6 +14,11 @@ All notable changes to this project will be documented in this file.
 <!--
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 -->
+## [0.10.0] (published on 2025-12-01)
+
+### Fixed
+
+- Ensure that only users from the same home server are allowed to enter public rooms, regardless of the visibility of the room.
 
 ## [0.9.0] (published on 2025-10-13)
 

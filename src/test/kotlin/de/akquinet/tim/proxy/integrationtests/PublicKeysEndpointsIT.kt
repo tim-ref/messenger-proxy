@@ -51,6 +51,7 @@ class PublicKeysEndpointsIT : DescribeSpec({
             vzdPublicIDCheck = mockk(),
             timAuthorizationCheckConfiguration = mockk(),
             berechtigungsstufeEinsService = mockk(),
+            a26515ValidationService = mockk(relaxed = true)
         )
 
         it("should answer /_matrix/key/v2/server/{keyId}") {
