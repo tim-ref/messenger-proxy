@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,18 +19,18 @@ import com.sksamuel.hoplite.Masked
 
 /** Configuration for the Synapse's admin API client */
 data class SynapseClientConfig(
-    /**
-     * This is the domain part in any matrix identifier belonging to this matrix server. Must match
-     * 'server_name' from homeserver.yaml. Used for validation.
-     */
-    val matrixDomain: String,
+  /**
+   * This is the domain part in any matrix identifier belonging to this matrix server. Must match
+   * 'server_name' from homeserver.yaml. Used for validation.
+   */
+  val matrixDomain: String,
 
-    /** The URL of this messenger proxy's Synapse's admin API */
-    val baseUrl: String,
+  /** The URL of this messenger proxy's Synapse's admin API */
+  val baseUrl: String,
 
-    /** Synapse admin username */
-    val username: Masked? = null,
+  /** Synapse admin username */
+  val username: Masked? = null,
 
-    /** Synapse admin password */
-    val password: Masked? = null,
+  /** Synapse admin password */
+  val password: Masked? = null,
 )

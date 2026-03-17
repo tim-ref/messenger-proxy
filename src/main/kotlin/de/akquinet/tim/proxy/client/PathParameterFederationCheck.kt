@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,24 +24,26 @@ import kotlinx.serialization.json.Json
 import net.folivo.trixnity.core.ErrorResponseSerializer
 
 /**
- * Federation check of path parameters per [A_26328](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_26328)
+ * Federation check of path parameters per
+ * [A_26328](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_26328)
  */
-val PathParameterFederationCheck = createRouteScopedPlugin(
+val PathParameterFederationCheck =
+  createRouteScopedPlugin(
     name = "PathParameterFederationCheckPlugin",
-    createConfiguration = ::PathParameterFederationCheckPluginConfiguration
-) {
+    createConfiguration = ::PathParameterFederationCheckPluginConfiguration,
+  ) {
     pluginConfig.apply {
-        onCall { call ->
-            val serverName = call.parameters[pathParameterName] ?: "server name not found"
-            val isUnfederatedDomain = service.isUnfederatedDomain(serverName)
-            if (isUnfederatedDomain) {
-                val response = unfederatedDomainResponse(serverName)
-                val body = json.encodeToJsonElement(ErrorResponseSerializer, response)
-                call.respond(Forbidden, body)
-            }
+      onCall { call ->
+        val serverName = call.parameters[pathParameterName] ?: "server name not found"
+        val isUnfederatedDomain = service.isUnfederatedDomain(serverName)
+        if (isUnfederatedDomain) {
+          val response = unfederatedDomainResponse(serverName)
+          val body = json.encodeToJsonElement(ErrorResponseSerializer, response)
+          call.respond(Forbidden, body)
         }
+      }
     }
-}
+  }
 
 /**
  * PathParameterFederationCheckPlugin configuration
@@ -50,7 +52,7 @@ val PathParameterFederationCheck = createRouteScopedPlugin(
  * @property service service performing the federation check.
  */
 class PathParameterFederationCheckPluginConfiguration {
-    var pathParameterName: String = "serverName"
-    lateinit var service: BerechtigungsstufeEinsService
-    var json: Json = Json
+  var pathParameterName: String = "serverName"
+  lateinit var service: BerechtigungsstufeEinsService
+  var json: Json = Json
 }

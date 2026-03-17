@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,23 +18,24 @@ package de.akquinet.tim.proxy.authorization
 import de.akquinet.tim.proxy.commons.GeneralError
 
 sealed interface MatrixAuthorizationError : GeneralError {
-    data object MissingMxidHeader : MatrixAuthorizationError {
-        override val message: String = "missing 'mxid' header"
-    }
+  data object MissingMxidHeader : MatrixAuthorizationError {
+    override val message: String = "missing 'mxid' header"
+  }
 
-    data object MissingAuthorizationHeader : MatrixAuthorizationError {
-        override val message: String = "missing 'authorization' header"
-    }
+  data object MissingAuthorizationHeader : MatrixAuthorizationError {
+    override val message: String = "missing 'authorization' header"
+  }
 
-    data class MalformedBearerToken(val token: String) : MatrixAuthorizationError {
-        override val message: String = "malformed bearer token: '$token'"
-    }
+  data class MalformedBearerToken(val token: String) : MatrixAuthorizationError {
+    override val message: String = "malformed bearer token: '$token'"
+  }
 
-    data class AuthenticationFailed(val token: String) : MatrixAuthorizationError {
-        override val message: String = "no mxid associated with bearer token"
-    }
+  data class AuthenticationFailed(val token: String) : MatrixAuthorizationError {
+    override val message: String = "no mxid associated with bearer token"
+  }
 
-    data class MxidsDoNotMatch(val givenMxid: String, val authenticatedMxid: String) : MatrixAuthorizationError {
-        override val message: String = "incompatible mxid and bearer token"
-    }
+  data class MxidsDoNotMatch(val givenMxid: String, val authenticatedMxid: String) :
+    MatrixAuthorizationError {
+    override val message: String = "incompatible mxid and bearer token"
+  }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,13 +25,12 @@ import io.ktor.http.contentLength
 import io.ktor.http.contentType
 import io.ktor.utils.io.ByteReadChannel
 
-class StreamingResponseReader(
-    val response: HttpResponse,
-    private val channel: ByteReadChannel
-) : OutgoingContent.ReadChannelContent() {
-    override val headers: Headers = response.headers.filterUnsafeHeaders()
-    override val contentType: ContentType? = response.contentType()
-    override val contentLength: Long? = response.contentLength()
-    override val status: HttpStatusCode = response.status
-    override fun readFrom(): ByteReadChannel = channel
+class StreamingResponseReader(val response: HttpResponse, private val channel: ByteReadChannel) :
+  OutgoingContent.ReadChannelContent() {
+  override val headers: Headers = response.headers.filterUnsafeHeaders()
+  override val contentType: ContentType? = response.contentType()
+  override val contentLength: Long? = response.contentLength()
+  override val status: HttpStatusCode = response.status
+
+  override fun readFrom(): ByteReadChannel = channel
 }

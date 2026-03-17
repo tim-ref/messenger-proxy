@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,22 +25,21 @@ import org.koin.core.qualifier.named
 
 class SynapseHealthApiMockEngine {
 
-    private val responseHeaders = headersOf(
-        "Content-Type" to listOf(ContentType.Any.toString())
-    )
+  private val responseHeaders = headersOf("Content-Type" to listOf(ContentType.Any.toString()))
 
-    private val client = HttpClient(MockEngine) {
-        engine {
-            named("synapseHealthApiMock")
-            addHandler { request ->
-                if (request.url.encodedPath == "/health") {
-                    respond("", HttpStatusCode.OK, responseHeaders)
-                }else {
-                    respond("Not found", HttpStatusCode.NotFound, responseHeaders)
-                }
-            }
+  private val client =
+    HttpClient(MockEngine) {
+      engine {
+        named("synapseHealthApiMock")
+        addHandler { request ->
+          if (request.url.encodedPath == "/health") {
+            respond("", HttpStatusCode.OK, responseHeaders)
+          } else {
+            respond("Not found", HttpStatusCode.NotFound, responseHeaders)
+          }
         }
+      }
     }
 
-    fun get() = client.engine
+  fun get() = client.engine
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,18 +24,19 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 
 class AuspraegungSerializer : KSerializer<UserAgent.Auspraegung> {
-    @OptIn(ExperimentalStdlibApi::class)
-    private val valuesMap = UserAgent.Auspraegung.entries.associateBy { it.serialized }
-    override val descriptor: SerialDescriptor
-        get() = PrimitiveSerialDescriptor(
-            AuspraegungSerializer::class.qualifiedName ?: "AuspraegungSerializer",
-            PrimitiveKind.STRING
-        )
+  @OptIn(ExperimentalStdlibApi::class)
+  private val valuesMap = UserAgent.Auspraegung.entries.associateBy { it.serialized }
+  override val descriptor: SerialDescriptor
+    get() =
+      PrimitiveSerialDescriptor(
+        AuspraegungSerializer::class.qualifiedName ?: "AuspraegungSerializer",
+        PrimitiveKind.STRING,
+      )
 
-    override fun deserialize(decoder: Decoder): UserAgent.Auspraegung =
-        valuesMap[decoder.decodeString()] ?: UserAgent.Auspraegung.UNKNOWN
+  override fun deserialize(decoder: Decoder): UserAgent.Auspraegung =
+    valuesMap[decoder.decodeString()] ?: UserAgent.Auspraegung.UNKNOWN
 
-    override fun serialize(encoder: Encoder, value: UserAgent.Auspraegung) {
-        encoder.encodeString(value.serialized)
-    }
+  override fun serialize(encoder: Encoder, value: UserAgent.Auspraegung) {
+    encoder.encodeString(value.serialized)
+  }
 }

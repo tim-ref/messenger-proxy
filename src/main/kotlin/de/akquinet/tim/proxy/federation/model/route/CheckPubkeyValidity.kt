@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,18 +24,15 @@ import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.core.WithoutAuth
 
 /**
- * @see <a href="https://spec.matrix.org/v1.3/identity-service-api/#get_matrixidentityv2pubkeyisvalid">matrix spec</a>
+ * @see <a
+ *   href="https://spec.matrix.org/v1.3/identity-service-api/#get_matrixidentityv2pubkeyisvalid">matrix
+ *   spec</a>
  */
 @Serializable
 @Resource("/_matrix/identity/v2/pubkey/isvalid")
 @HttpMethod(HttpMethodType.GET)
 @WithoutAuth
-data class CheckPubkeyValidity(
-    @SerialName("public_key") val publicKey: String
-) : MatrixEndpoint<Unit, CheckPubkeyValidity.Response> {
-    @Serializable
-    data class Response (
-        @SerialName("valid") val valid: Boolean
-    )
+data class CheckPubkeyValidity(@SerialName("public_key") val publicKey: String) :
+  MatrixEndpoint<Unit, CheckPubkeyValidity.Response> {
+  @Serializable data class Response(@SerialName("valid") val valid: Boolean)
 }
-

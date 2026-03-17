@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,13 +26,7 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
  * Creates a new [PrometheusMeterRegistry], installs [MicrometerMetrics] and adds a metrics route.
  */
 fun Application.metricsModule() {
-    val appMicrometerRegistry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
-    install(MicrometerMetrics) {
-        registry = appMicrometerRegistry
-    }
-    routing {
-        get("/metrics") {
-            call.respond(appMicrometerRegistry.scrape())
-        }
-    }
+  val appMicrometerRegistry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
+  install(MicrometerMetrics) { registry = appMicrometerRegistry }
+  routing { get("/metrics") { call.respond(appMicrometerRegistry.scrape()) } }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,51 +22,64 @@ import arrow.core.raise.ensureNotNull
 import io.ktor.http.*
 
 interface MatrixAuthorizationService {
-    suspend fun authorize(headers: Headers): Either<MatrixAuthorizationError, String>
+  suspend fun authorize(headers: Headers): Either<MatrixAuthorizationError, String>
 
-    suspend fun authorizeWithoutMxid(headers: Headers): Either<MatrixAuthorizationError, Unit>
+  suspend fun authorizeWithoutMxid(headers: Headers): Either<MatrixAuthorizationError, Unit>
 }
 
 class MatrixAuthorizationServiceImpl(private val matrixOpenIdClient: MatrixOpenIdClient) :
-    MatrixAuthorizationService {
+  MatrixAuthorizationService {
 
-    override suspend fun authorize(headers: Headers): Either<MatrixAuthorizationError, String> = either {
-        val mxid = ensureNotNull(headers["mxid"]) {
-            MatrixAuthorizationError.MissingMxidHeader
+  override suspend fun authorize(headers: Headers): Either<MatrixAuthorizationError, String> =
+    either {
+      val mxid = ensureNotNull(headers["mxid"]) { MatrixAuthorizationError.MissingMxidHeader }
+
+      val auth =
+        ensureNotNull(headers["authorization"]) {
+          MatrixAuthorizationError.MissingAuthorizationHeader
         }
 
-        val auth = ensureNotNull(headers["authorization"]) {
-            MatrixAuthorizationError.MissingAuthorizationHeader
-        }
-
-        val (token) = ensureNotNull(Regex("^Bearer (.+)").find(auth)) {
+      val (token) =
+        ensureNotNull(Regex("^Bearer (.+)").find(auth)) {
             MatrixAuthorizationError.MalformedBearerToken(auth)
-        }.destructured
+          }
+          .destructured
 
-        val authenticatedMxid = when (val authenticationResult = matrixOpenIdClient.authenticatedUser(token)) {
-            is UserAuthenticationResult.Success -> authenticationResult.mxid
-            is UserAuthenticationResult.Failure -> raise(MatrixAuthorizationError.AuthenticationFailed(token))
+      val authenticatedMxid =
+        when (val authenticationResult = matrixOpenIdClient.authenticatedUser(token)) {
+          is UserAuthenticationResult.Success -> authenticationResult.mxid
+          is UserAuthenticationResult.Failure ->
+            raise(MatrixAuthorizationError.AuthenticationFailed(token))
         }
 
-        ensure(mxid == authenticatedMxid) {
-            MatrixAuthorizationError.MxidsDoNotMatch(givenMxid = mxid, authenticatedMxid = authenticatedMxid)
-        }
+      ensure(mxid == authenticatedMxid) {
+        MatrixAuthorizationError.MxidsDoNotMatch(
+          givenMxid = mxid,
+          authenticatedMxid = authenticatedMxid,
+        )
+      }
 
-        mxid
+      mxid
     }
 
-    override suspend fun authorizeWithoutMxid(headers: Headers): Either<MatrixAuthorizationError, Unit> = either {
-        val auth = ensureNotNull(headers["authorization"]) {
-            MatrixAuthorizationError.MissingAuthorizationHeader
-        }
+  override suspend fun authorizeWithoutMxid(
+    headers: Headers
+  ): Either<MatrixAuthorizationError, Unit> = either {
+    val auth =
+      ensureNotNull(headers["authorization"]) {
+        MatrixAuthorizationError.MissingAuthorizationHeader
+      }
 
-        val (token) = ensureNotNull(Regex("^Bearer (.+)").find(auth)) {
-            MatrixAuthorizationError.MalformedBearerToken(auth)
-        }.destructured
-
-        when (matrixOpenIdClient.authenticatedUser(token)) {
-            is UserAuthenticationResult.Success -> Unit
-            is UserAuthenticationResult.Failure -> raise(MatrixAuthorizationError.AuthenticationFailed(token))
+    val (token) =
+      ensureNotNull(Regex("^Bearer (.+)").find(auth)) {
+          MatrixAuthorizationError.MalformedBearerToken(auth)
         }
+        .destructured
+
+    when (matrixOpenIdClient.authenticatedUser(token)) {
+      is UserAuthenticationResult.Success -> Unit
+      is UserAuthenticationResult.Failure ->
+        raise(MatrixAuthorizationError.AuthenticationFailed(token))
     }
+  }
 }

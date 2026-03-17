@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,31 +24,33 @@ import net.folivo.trixnity.core.MatrixServerException
 import net.folivo.trixnity.core.model.UserId
 
 fun interface AccessTokenToUserIdAuthenticationFunction :
-    suspend (UserAccessTokenCredentials) -> AccessTokenAuthenticationFunctionResult
+  suspend (UserAccessTokenCredentials) -> AccessTokenAuthenticationFunctionResult
 
-@JvmInline
-value class UserIdPrincipal(val userId: UserId) : Principal
+@JvmInline value class UserIdPrincipal(val userId: UserId) : Principal
 
-class AccessTokenToUserIdAuthenticationFunctionImpl(private val accessTokenToUserId: AccessTokenToUserId) :
-    AccessTokenToUserIdAuthenticationFunction {
-    override suspend operator fun invoke(credentials: UserAccessTokenCredentials): AccessTokenAuthenticationFunctionResult {
-        val userId = kotlin.runCatching { accessTokenToUserId(credentials.accessToken) }
-        return AccessTokenAuthenticationFunctionResult(
-            principal = userId.getOrNull()?.let { UserIdPrincipal(it) },
-            cause = userId.exceptionOrNull()?.let { cause ->
-                when (cause) {
-                    is MatrixServerException -> handleMatrixServerException(cause)
-                    else -> AuthenticationFailedCause.Error(cause.message ?: "unknown")
-                }
-            }
-        )
+class AccessTokenToUserIdAuthenticationFunctionImpl(
+  private val accessTokenToUserId: AccessTokenToUserId
+) : AccessTokenToUserIdAuthenticationFunction {
+  override suspend operator fun invoke(
+    credentials: UserAccessTokenCredentials
+  ): AccessTokenAuthenticationFunctionResult {
+    val userId = kotlin.runCatching { accessTokenToUserId(credentials.accessToken) }
+    return AccessTokenAuthenticationFunctionResult(
+      principal = userId.getOrNull()?.let { UserIdPrincipal(it) },
+      cause =
+        userId.exceptionOrNull()?.let { cause ->
+          when (cause) {
+            is MatrixServerException -> handleMatrixServerException(cause)
+            else -> AuthenticationFailedCause.Error(cause.message ?: "unknown")
+          }
+        },
+    )
+  }
+
+  private fun handleMatrixServerException(cause: MatrixServerException) =
+    when (cause.errorResponse) {
+      is ErrorResponse.MissingToken -> AuthenticationFailedCause.NoCredentials
+      is ErrorResponse.UnknownToken -> AuthenticationFailedCause.InvalidCredentials
+      else -> AuthenticationFailedCause.Error(cause.errorResponse.error ?: "unknown")
     }
-
-    private fun handleMatrixServerException(cause: MatrixServerException) =
-        when (cause.errorResponse) {
-            is ErrorResponse.MissingToken -> AuthenticationFailedCause.NoCredentials
-            is ErrorResponse.UnknownToken -> AuthenticationFailedCause.InvalidCredentials
-            else -> AuthenticationFailedCause.Error(cause.errorResponse.error ?: "unknown")
-        }
-
 }

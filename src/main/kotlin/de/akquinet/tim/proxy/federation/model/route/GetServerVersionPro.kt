@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,21 +24,21 @@ import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.serverserverapi.model.discovery.GetServerVersion
 
 /**
- * @see <a href="https://spec.matrix.org/v1.11/server-server-api/#get_matrixfederationv1version">matrix spec</a>
- * Removed authentication in compliance with <a href="https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_26331">A_26331</a>.
+ * @see <a
+ *   href="https://spec.matrix.org/v1.11/server-server-api/#get_matrixfederationv1version">matrix
+ *   spec</a> Removed authentication in compliance with <a
+ *   href="https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_26331">A_26331</a>.
  */
 @Serializable
 @Resource("/_matrix/federation/v1/version")
 @HttpMethod(HttpMethodType.GET)
 object GetServerVersionRequireAuth : MatrixEndpoint<Unit, GetServerVersion.Response> {
+  @Serializable
+  data class Response(@SerialName("server") val server: Server) {
     @Serializable
-    data class Response(
-        @SerialName("server") val server: Server,
-    ) {
-        @Serializable
-        data class Server(
-            @SerialName("name") val name: String,
-            @SerialName("version") val version: String,
-        )
-    }
+    data class Server(
+      @SerialName("name") val name: String,
+      @SerialName("version") val version: String,
+    )
+  }
 }

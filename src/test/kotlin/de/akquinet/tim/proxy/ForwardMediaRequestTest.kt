@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,117 +43,115 @@ import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.ByteWriteChannel
 import io.ktor.utils.io.close
 import io.ktor.utils.io.readAvailable
-import org.slf4j.event.Level
 import kotlin.random.Random
+import org.slf4j.event.Level
 
-class ForwardMediaRequestTest : ShouldSpec({
-
+class ForwardMediaRequestTest :
+  ShouldSpec({
     val httpClient = HttpClient(OkHttp)
-    val destinationServer = embeddedServer(
+    val destinationServer =
+      embeddedServer(
         Netty,
         applicationEngineEnvironment {
-            connector {
-                port = 3101
-            }
-            module {
-                install(CallLogging) {
-                    level = Level.TRACE
-                }
-                routing {
-                    get("/media") {
-                        call.respond(object : OutgoingContent.WriteChannelContent() {
-                            override val contentType = ContentType.Application.OctetStream
+          connector { port = 3101 }
+          module {
+            install(CallLogging) { level = Level.TRACE }
+            routing {
+              get("/media") { _ ->
+                call.respond(
+                  object : OutgoingContent.WriteChannelContent() {
+                    override val contentType = ContentType.Application.OctetStream
 
-                            override suspend fun writeTo(channel: ByteWriteChannel) {
-                                val buffer = ByteArray(8192)
-                                val totalSize = 120 * 1024 * 1024
-                                var sentBytes = 0
+                    override suspend fun writeTo(channel: ByteWriteChannel) {
+                      val buffer = ByteArray(8192)
+                      val totalSize = 120 * 1024 * 1024
+                      var sentBytes = 0
 
-                                while (sentBytes < totalSize) {
-                                    Random.nextBytes(buffer)
-                                    val chunkSize = minOf(buffer.size, totalSize - sentBytes)
-                                    channel.writeFully(buffer, 0, chunkSize)
-                                    sentBytes += chunkSize
-                                }
-                                channel.close()
-                            }
-                        })
+                      while (sentBytes < totalSize) {
+                        Random.nextBytes(buffer)
+                        val chunkSize = minOf(buffer.size, totalSize - sentBytes)
+                        channel.writeFully(buffer, 0, chunkSize)
+                        sentBytes += chunkSize
+                      }
+                      channel.close()
                     }
-                }
+                  }
+                )
+              }
             }
-        }
-    )
+          }
+        },
+      )
 
-    val proxy = embeddedServer(
+    val proxy =
+      embeddedServer(
         Netty,
         applicationEngineEnvironment {
-            connector {
-                port = 3100
+          connector { port = 3100 }
+          module {
+            install(CallLogging) { level = Level.TRACE }
+            routing {
+              get("/media") { _ ->
+                forwardMediaRequest(
+                  call,
+                  httpClient,
+                  call.request.uri.mergeToUrl("http://localhost:3101/media"),
+                )
+              }
             }
-            module {
-                install(CallLogging) {
-                    level = Level.TRACE
-                }
-                routing {
-                    get("/media") {
-                        forwardMediaRequest(
-                            call,
-                            httpClient,
-                            call.request.uri.mergeToUrl("http://localhost:3101/media"),
-                        )
-                    }
-                }
-            }
-        }
-    )
+          }
+        },
+      )
 
     beforeSpec {
-        destinationServer.start()
-        proxy.start()
+      destinationServer.start()
+      proxy.start()
     }
 
     afterSpec {
-        destinationServer.stop()
-        proxy.stop()
+      destinationServer.stop()
+      proxy.stop()
     }
 
     context("forwardMediaRequest") {
-        should("consume less than 5 % of transmitted bytes of memory when transferring 120 MB media content") {
-            val response = httpClient.get("http://localhost:3100/media")
+      should(
+        "consume less than 5 % of transmitted bytes of memory when transferring 120 MB media content"
+      ) {
+        val response = httpClient.get("http://localhost:3100/media")
 
-            assertSoftly(response) {
-                status shouldBe HttpStatusCode.OK
-                headers["Content-Type"] shouldBe ContentType.Application.OctetStream.toString()
-                headers["Transfer-Encoding"] shouldBe "chunked"
+        assertSoftly(response) {
+          status shouldBe HttpStatusCode.OK
+          headers["Content-Type"] shouldBe ContentType.Application.OctetStream.toString()
+          headers["Transfer-Encoding"] shouldBe "chunked"
 
-                val channel: ByteReadChannel = response.bodyAsChannel()
+          val channel: ByteReadChannel = response.bodyAsChannel()
 
-                System.gc()
-                val beforeMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
-                var numberOfChunks = 0
+          System.gc()
+          val beforeMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
+          var numberOfChunks = 0
 
-                val totalBytesRead: Long = run {
-                    val buffer = ByteArray(8 * 1024) // Default buffer size
-                    var totalRead = 0L
-                    while (!channel.isClosedForRead) {
-                        val readBytes = channel.readAvailable(buffer)
-                        if(readBytes > 0) {
-                            totalRead += readBytes
-                            numberOfChunks++
-                        }
-                    }
-                    totalRead
-                }
-
-                totalBytesRead shouldBe 120 * 1024 * 1024L // 120 MB
-                numberOfChunks shouldBeGreaterThan 1
-
-                val afterMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
-                val memoryUsed = afterMemory - beforeMemory
-
-                memoryUsed.shouldBeGreaterThanOrEqual(0L)
-                memoryUsed.shouldBeLessThan(totalBytesRead)
+          val totalBytesRead: Long = run {
+            val buffer = ByteArray(8 * 1024) // Default buffer size
+            var totalRead = 0L
+            while (!channel.isClosedForRead) {
+              val readBytes = channel.readAvailable(buffer)
+              if (readBytes > 0) {
+                totalRead += readBytes
+                numberOfChunks++
+              }
             }
+            totalRead
+          }
+
+          totalBytesRead shouldBe 120 * 1024 * 1024L // 120 MB
+          numberOfChunks shouldBeGreaterThan 1
+
+          val afterMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
+          val memoryUsed = afterMemory - beforeMemory
+
+          memoryUsed.shouldBeGreaterThanOrEqual(0L)
+          memoryUsed.shouldBeLessThan(totalBytesRead)
         }
+      }
     }
-})
+  })

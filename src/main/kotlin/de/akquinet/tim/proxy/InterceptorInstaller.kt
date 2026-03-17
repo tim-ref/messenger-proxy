@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,18 +23,18 @@ import io.ktor.http.fullPath
 
 class InterceptorInstaller(val httpClient: HttpClient) {
 
-    fun install() {
-        httpClient.responsePipeline.intercept(HttpResponsePipeline.Transform) { (info, body) ->
-            when(context.request.url.fullPath) {
-                GetVersionsTransformer.path ->  {
-                    if (GetVersionsTransformer.applicableStates.contains(context.response.status)) {
-                        proceedWith(HttpResponseContainer(info, GetVersionsTransformer.transform(body)))
-                    }else {
-                        return@intercept
-                    }
-                }
-                else -> return@intercept
-            }
+  fun install() {
+    httpClient.responsePipeline.intercept(HttpResponsePipeline.Transform) { (info, body) ->
+      when (context.request.url.fullPath) {
+        GetVersionsTransformer.path -> {
+          if (GetVersionsTransformer.applicableStates.contains(context.response.status)) {
+            proceedWith(HttpResponseContainer(info, GetVersionsTransformer.transform(body)))
+          } else {
+            return@intercept
+          }
         }
+        else -> return@intercept
+      }
     }
+  }
 }

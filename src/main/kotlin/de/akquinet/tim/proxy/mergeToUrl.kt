@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +17,14 @@ package de.akquinet.tim.proxy
 
 import io.ktor.http.*
 
-fun String.mergeToUrl(otherUrl: String): Url = URLBuilder().apply {
-    takeFrom(this@mergeToUrl)
-    Url(otherUrl).also { destinationBaseUrl ->
+fun String.mergeToUrl(otherUrl: String): Url =
+  URLBuilder()
+    .apply {
+      takeFrom(this@mergeToUrl)
+      Url(otherUrl).also { destinationBaseUrl ->
         protocol = destinationBaseUrl.protocol
         host = destinationBaseUrl.host
         port = destinationBaseUrl.port
+      }
     }
-}.build()
+    .build()

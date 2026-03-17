@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,18 +24,19 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 
 class PlatformSerializer : KSerializer<UserAgent.Plattform> {
-    @OptIn(ExperimentalStdlibApi::class)
-    private val valuesMap = UserAgent.Plattform.entries.associateBy { it.serialized }
-    override val descriptor: SerialDescriptor
-        get() = PrimitiveSerialDescriptor(
-            PlatformSerializer::class.qualifiedName ?: "PlatformSerializer",
-            PrimitiveKind.STRING
-        )
+  @OptIn(ExperimentalStdlibApi::class)
+  private val valuesMap = UserAgent.Plattform.entries.associateBy { it.serialized }
+  override val descriptor: SerialDescriptor
+    get() =
+      PrimitiveSerialDescriptor(
+        PlatformSerializer::class.qualifiedName ?: "PlatformSerializer",
+        PrimitiveKind.STRING,
+      )
 
-    override fun deserialize(decoder: Decoder): UserAgent.Plattform =
-        valuesMap[decoder.decodeString()] ?: UserAgent.Plattform.UNKNOWN
+  override fun deserialize(decoder: Decoder): UserAgent.Plattform =
+    valuesMap[decoder.decodeString()] ?: UserAgent.Plattform.UNKNOWN
 
-    override fun serialize(encoder: Encoder, value: UserAgent.Plattform) {
-        encoder.encodeString(value.serialized)
-    }
+  override fun serialize(encoder: Encoder, value: UserAgent.Plattform) {
+    encoder.encodeString(value.serialized)
+  }
 }

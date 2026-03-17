@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,27 +25,32 @@ import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.core.WithoutAuth
 
 /**
- * @see <a href="https://spec.matrix.org/v1.3/client-server-api/#post_matrixclientv3account3pidemailrequesttoken">matrix spec</a>
+ * @see <a
+ *   href="https://spec.matrix.org/v1.3/client-server-api/#post_matrixclientv3account3pidemailrequesttoken">matrix
+ *   spec</a>
  */
 @Serializable
 @Resource("/_matrix/client/v3/account/3pid/email/requestToken")
 @HttpMethod(HttpMethodType.POST)
 @WithoutAuth
 object GetEmailRequestTokenFor3Pid :
-    MatrixEndpoint<GetEmailRequestTokenForPassword.Request, GetEmailRequestTokenForPassword.Response> {
-    @Serializable
-    data class Request(
-        @SerialName("client_secret") val clientSecret: String,
-        @SerialName("email") val email: String,
-        @SerialName("id_access_token") val idAccessToken: String? = null,
-        @SerialName("id_server") val idServer: String? = null,
-        @SerialName("next_link") val nextLink: String? = null,
-        @SerialName("send_attempt") val sendAttempt: Long
-    )
+  MatrixEndpoint<
+    GetEmailRequestTokenForPassword.Request,
+    GetEmailRequestTokenForPassword.Response,
+  > {
+  @Serializable
+  data class Request(
+    @SerialName("client_secret") val clientSecret: String,
+    @SerialName("email") val email: String,
+    @SerialName("id_access_token") val idAccessToken: String? = null,
+    @SerialName("id_server") val idServer: String? = null,
+    @SerialName("next_link") val nextLink: String? = null,
+    @SerialName("send_attempt") val sendAttempt: Long,
+  )
 
-    @Serializable
-    data class Response(
-        @SerialName("sid") val sessionId: String,
-        @SerialName("submit_url") val submitUrl: String? = null,
-    )
+  @Serializable
+  data class Response(
+    @SerialName("sid") val sessionId: String,
+    @SerialName("submit_url") val submitUrl: String? = null,
+  )
 }

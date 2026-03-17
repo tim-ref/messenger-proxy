@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,8 @@ import io.ktor.utils.io.core.toByteArray
 import org.intellij.lang.annotations.Language
 
 @Language("JSON")
-const val inputJson = """
+const val inputJson =
+  """
 {
   "unstable_features": {
     "org.example.my_feature": true
@@ -45,85 +46,85 @@ const val inputJson = """
 
 // Tests compliance with https://spec.matrix.org/v1.11/client-server-api/#get_matrixclientversions
 class GetVersionsTransformerTest : ShouldSpec() {
-    init {
-        coroutineTestScope = true
+  init {
+    coroutineTestScope = true
 
-        context("Input variant: ByteReadChannel") {
-            should("produce a valid JSON object") {
-                val homeserverResponse = ByteReadChannel(inputJson.toByteArray())
+    context("Input variant: ByteReadChannel") {
+      should("produce a valid JSON object") {
+        val homeserverResponse = ByteReadChannel(inputJson.toByteArray())
 
-                val transformer = GetVersionsTransformer
-                val result = transformer.transform(homeserverResponse) as ByteReadChannel
+        val transformer = GetVersionsTransformer
+        val result = transformer.transform(homeserverResponse) as ByteReadChannel
 
-                val proxyResponseBody = result.toByteArray().decodeToString()
+        val proxyResponseBody = result.toByteArray().decodeToString()
 
-                proxyResponseBody.shouldBeValidJson()
-                proxyResponseBody.shouldBeJsonObject()
-            }
+        proxyResponseBody.shouldBeValidJson()
+        proxyResponseBody.shouldBeJsonObject()
+      }
 
-            should("strip matrix versions above v1.11") {
-                val homeserverResponse = ByteReadChannel(inputJson.toByteArray())
+      should("strip matrix versions above v1.11") {
+        val homeserverResponse = ByteReadChannel(inputJson.toByteArray())
 
-                val transformer = GetVersionsTransformer
-                val result = transformer.transform(homeserverResponse) as ByteReadChannel
+        val transformer = GetVersionsTransformer
+        val result = transformer.transform(homeserverResponse) as ByteReadChannel
 
-                val proxyResponse = result.toByteArray().decodeToString()
+        val proxyResponse = result.toByteArray().decodeToString()
 
-                proxyResponse shouldContainJsonKey "$.versions"
-                proxyResponse shouldContain "\"v1.11\""
-                proxyResponse shouldNotContain "\"v1.12\""
-            }
+        proxyResponse shouldContainJsonKey "$.versions"
+        proxyResponse shouldContain "\"v1.11\""
+        proxyResponse shouldNotContain "\"v1.12\""
+      }
 
-            should("produce 'unstable features' field") {
-                val homeserverResponse = ByteReadChannel(inputJson.toByteArray())
+      should("produce 'unstable features' field") {
+        val homeserverResponse = ByteReadChannel(inputJson.toByteArray())
 
-                val transformer = GetVersionsTransformer
-                val result = transformer.transform(homeserverResponse) as ByteReadChannel
+        val transformer = GetVersionsTransformer
+        val result = transformer.transform(homeserverResponse) as ByteReadChannel
 
-                val proxyResponse = result.toByteArray().decodeToString()
+        val proxyResponse = result.toByteArray().decodeToString()
 
-                proxyResponse shouldNotContainJsonKey "$.unstableFeatures"
-                proxyResponse shouldContainJsonKey "$.unstable_features"
-            }
-        }
-
-        context("Input variant: ByteReadPacket") {
-            should("produce a valid JSON object") {
-                val homeserverResponse = ByteReadPacket(inputJson.toByteArray())
-
-                val transformer = GetVersionsTransformer
-                val result = transformer.transform(homeserverResponse) as ByteReadPacket
-
-                val proxyResponseBody = result.readBytes().decodeToString()
-
-                proxyResponseBody.shouldBeValidJson()
-                proxyResponseBody.shouldBeJsonObject()
-            }
-
-            should("strip matrix versions above v1.11") {
-                val homeserverResponse = ByteReadPacket(inputJson.toByteArray())
-
-                val transformer = GetVersionsTransformer
-                val result = transformer.transform(homeserverResponse) as ByteReadPacket
-
-                val proxyResponse = result.readBytes().decodeToString()
-
-                proxyResponse shouldContainJsonKey "$.versions"
-                proxyResponse shouldContain "\"v1.11\""
-                proxyResponse shouldNotContain "\"v1.12\""
-            }
-
-            should("produce 'unstable features' field") {
-                val homeserverResponse = ByteReadPacket(inputJson.toByteArray())
-
-                val transformer = GetVersionsTransformer
-                val result = transformer.transform(homeserverResponse) as ByteReadPacket
-
-                val proxyResponse = result.readBytes().decodeToString()
-
-                proxyResponse shouldNotContainJsonKey "$.unstableFeatures"
-                proxyResponse shouldContainJsonKey "$.unstable_features"
-            }
-        }
+        proxyResponse shouldNotContainJsonKey "$.unstableFeatures"
+        proxyResponse shouldContainJsonKey "$.unstable_features"
+      }
     }
+
+    context("Input variant: ByteReadPacket") {
+      should("produce a valid JSON object") {
+        val homeserverResponse = ByteReadPacket(inputJson.toByteArray())
+
+        val transformer = GetVersionsTransformer
+        val result = transformer.transform(homeserverResponse) as ByteReadPacket
+
+        val proxyResponseBody = result.readBytes().decodeToString()
+
+        proxyResponseBody.shouldBeValidJson()
+        proxyResponseBody.shouldBeJsonObject()
+      }
+
+      should("strip matrix versions above v1.11") {
+        val homeserverResponse = ByteReadPacket(inputJson.toByteArray())
+
+        val transformer = GetVersionsTransformer
+        val result = transformer.transform(homeserverResponse) as ByteReadPacket
+
+        val proxyResponse = result.readBytes().decodeToString()
+
+        proxyResponse shouldContainJsonKey "$.versions"
+        proxyResponse shouldContain "\"v1.11\""
+        proxyResponse shouldNotContain "\"v1.12\""
+      }
+
+      should("produce 'unstable features' field") {
+        val homeserverResponse = ByteReadPacket(inputJson.toByteArray())
+
+        val transformer = GetVersionsTransformer
+        val result = transformer.transform(homeserverResponse) as ByteReadPacket
+
+        val proxyResponse = result.readBytes().decodeToString()
+
+        proxyResponse shouldNotContainJsonKey "$.unstableFeatures"
+        proxyResponse shouldContainJsonKey "$.unstable_features"
+      }
+    }
+  }
 }

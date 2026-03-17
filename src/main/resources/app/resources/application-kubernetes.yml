@@ -1,5 +1,5 @@
 #
-# Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+# Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ registrationServiceConfig:
   servicePort: ${REGISTRATION_SERVICE_SERVICE_PORT}
   healthPort: ${REGISTRATION_SERVICE_HEALTH_PORT}
   federationListEndpoint: ${REGISTRATION_SERVICE_FEDERATION_LIST_ENDPOINT}
-  invitePermissionCheckEndpoint: ${REGISTRATION_SERVICE_INVITE_PERMISSION_CHECK_ENDPOINT}
   readinessEndpoint: ${REGISTRATION_SERVICE_READINESS_ENDPOINT}
   wellKnownSupportEndpoint: ${REGISTRATION_SERVICE_WELL_KNOWN_SUPPORT_ENDPOINT:-/backend/well-known-support}
 
@@ -52,16 +51,8 @@ actuatorConfig:
   port: ${HEALTHCHECK_PORT}
   basePath: "/actuator"
 
-contactManagement:
-  port: ${CONTACT_MANAGEMENT_PORT}
-
 tiMessengerInformationConfiguration:
   port: ${TIM_INFORMATION_PORT:-7777}
-
-database:
-  jdbcUrl: ${PROXY_DB_URL}
-  dbUser: ${PROXY_DB_USER}
-  dbPassword: ${PROXY_DB_PASSWORD}
 
 logInfoConfig:
   url: ${LOGGING_SERVICE_URL}
@@ -96,3 +87,9 @@ synapse:
     baseUrl: ${HOMESERVER_URL}
     username: ${TIM_SYNAPSE_ADMIN_MXID:-null}
     password: ${TIM_SYNAPSE_ADMIN_PASSWORD:-null}
+
+# A_28564-01: Orphaned room cleanup configuration
+orphanedRoomCleanup:
+  enabled: ${ORPHANED_ROOM_CLEANUP_ENABLED:-true}
+  checkIntervalDays: ${ORPHANED_ROOM_CLEANUP_INTERVAL_DAYS:-1}
+  roomAgeThresholdDays: ${ORPHANED_ROOM_CLEANUP_AGE_THRESHOLD_DAYS:-14}

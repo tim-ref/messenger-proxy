@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,11 @@ package de.akquinet.tim.proxy
 import java.io.Serializable
 
 data class Quadruple<out A, out B, out C, out D>(
-    val first: A,
-    val second: B,
-    val third: C,
-    val fourth: D
+  val first: A,
+  val second: B,
+  val third: C,
+  val fourth: D,
 ) : Serializable {
 
-    override fun toString(): String = "($first, $second, $third, $fourth)"
+  override fun toString(): String = "($first, $second, $third, $fourth)"
 }

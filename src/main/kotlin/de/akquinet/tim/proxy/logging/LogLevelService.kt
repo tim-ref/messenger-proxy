@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,36 +17,39 @@ package de.akquinet.tim.proxy.logging
 
 import ch.qos.logback.classic.Level
 import de.akquinet.tim.proxy.ProxyConfiguration
+import kotlin.time.DurationUnit
+import kotlin.time.toDuration
 import kotlinx.coroutines.delay
 import mu.KotlinLogging
 import org.slf4j.LoggerFactory
-import kotlin.time.DurationUnit
-import kotlin.time.toDuration
 
 class LogLevelService(
-    private val logLevelResetConfiguration: ProxyConfiguration.LogLevelResetConfiguration
+  private val logLevelResetConfiguration: ProxyConfiguration.LogLevelResetConfiguration
 ) {
 
-    private val logger = KotlinLogging.logger {}
-    private val loggerContext = LoggerFactory.getILoggerFactory()
+  private val logger = KotlinLogging.logger {}
+  private val loggerContext = LoggerFactory.getILoggerFactory()
 
-    fun setLogLevel(newLogLevel: Level, loggerIdentifier: String = org.slf4j.Logger.ROOT_LOGGER_NAME) {
-        val resetLogLevel = Level.toLevel(logLevelResetConfiguration.resetLogLevel)
-        if (newLogLevel != resetLogLevel) {
-            val targetLogger = loggerContext.getLogger(loggerIdentifier) as? ch.qos.logback.classic.Logger
-            targetLogger?.let {
-                logger.info { "Setting log level to $newLogLevel for target logger $loggerIdentifier" }
-                it.level = newLogLevel
-            }
-        }
+  fun setLogLevel(
+    newLogLevel: Level,
+    loggerIdentifier: String = org.slf4j.Logger.ROOT_LOGGER_NAME,
+  ) {
+    val resetLogLevel = Level.toLevel(logLevelResetConfiguration.resetLogLevel)
+    if (newLogLevel != resetLogLevel) {
+      val targetLogger = loggerContext.getLogger(loggerIdentifier) as? ch.qos.logback.classic.Logger
+      targetLogger?.let {
+        logger.info { "Setting log level to $newLogLevel for target logger $loggerIdentifier" }
+        it.level = newLogLevel
+      }
     }
+  }
 
-    suspend fun scheduleLogLevelReset(loggerIdentifier: String = org.slf4j.Logger.ROOT_LOGGER_NAME) {
-        delay(logLevelResetConfiguration.logLevelResetDelayInSeconds.toDuration(DurationUnit.SECONDS))
-        val targetLogger = loggerContext.getLogger(loggerIdentifier) as? ch.qos.logback.classic.Logger
-        targetLogger?.let {
-            it.level = Level.toLevel(logLevelResetConfiguration.resetLogLevel)
-            logger.info { "Reset log level back to ${it.level.levelStr} for target logger ${it.name}" }
-        }
+  suspend fun scheduleLogLevelReset(loggerIdentifier: String = org.slf4j.Logger.ROOT_LOGGER_NAME) {
+    delay(logLevelResetConfiguration.logLevelResetDelayInSeconds.toDuration(DurationUnit.SECONDS))
+    val targetLogger = loggerContext.getLogger(loggerIdentifier) as? ch.qos.logback.classic.Logger
+    targetLogger?.let {
+      it.level = Level.toLevel(logLevelResetConfiguration.resetLogLevel)
+      logger.info { "Reset log level back to ${it.level.levelStr} for target logger ${it.name}" }
     }
+  }
 }

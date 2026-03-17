@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,21 +19,22 @@ import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.shouldBe
 import io.ktor.http.*
 
-class HeadersExtensionTest : ShouldSpec({
-
+class HeadersExtensionTest :
+  ShouldSpec({
     should("streamline multiple headers with same value") {
-        val headers = headersOf(
-            "cache-control" to listOf("no-cache"),
-            "content-length" to listOf("724"),
-            "content-type" to listOf("application/json","charset=UTF-8"),
-            "date" to listOf("Thu, 21 Nov 2024 09:42:44 GMT"),
-            "referrer-policy" to listOf("no-referrer"),
-            "strict-transport-security" to listOf("max-age=31536000", "includeSubDomains"),
-            "x-content-type-options" to listOf("nosniff"),
-            "x-frame-options" to listOf("SAMEORIGIN"),
-            "x-xss-protection" to listOf("1", "mode=block"),
+      val headers =
+        headersOf(
+          "cache-control" to listOf("no-cache"),
+          "content-length" to listOf("724"),
+          "content-type" to listOf("application/json", "charset=UTF-8"),
+          "date" to listOf("Thu, 21 Nov 2024 09:42:44 GMT"),
+          "referrer-policy" to listOf("no-referrer"),
+          "strict-transport-security" to listOf("max-age=31536000", "includeSubDomains"),
+          "x-content-type-options" to listOf("nosniff"),
+          "x-frame-options" to listOf("SAMEORIGIN"),
+          "x-xss-protection" to listOf("1", "mode=block"),
         )
 
-        headers.filterUnsafeHeaders().contains("Content-Length") shouldBe false
+      headers.filterUnsafeHeaders().contains("Content-Length") shouldBe false
     }
-})
+  })

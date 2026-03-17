@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,25 +29,22 @@ import net.folivo.trixnity.core.model.keys.Signed
 @Resource("/_matrix/client/v3/rooms/{roomId}/join")
 @HttpMethod(POST)
 data class RoomJoin(
-    @SerialName("roomId") val roomId: String,
-    @SerialName("server_name") val serverNames: Set<String>? = null,
-    @SerialName("user_id") val asUserId: UserId? = null
+  @SerialName("roomId") val roomId: String,
+  @SerialName("server_name") val serverNames: Set<String>? = null,
+  @SerialName("user_id") val asUserId: UserId? = null,
 ) : MatrixEndpoint<RoomJoin.Request, RoomJoin.Response> {
+  @Serializable
+  data class Request(
+    @SerialName("reason") val reason: String?,
+    @SerialName("third_party_signed") val thirdPartySigned: Signed<ThirdParty, String>?,
+  ) {
     @Serializable
-    data class Request(
-        @SerialName("reason") val reason: String?,
-        @SerialName("third_party_signed") val thirdPartySigned: Signed<ThirdParty, String>?,
-    ) {
-        @Serializable
-        data class ThirdParty(
-            @SerialName("sender") val sender: UserId,
-            @SerialName("mxid") val mxid: UserId,
-            @SerialName("token") val token: String,
-        )
-    }
-
-    @Serializable
-    data class Response(
-        @SerialName("room_id") val roomId: RoomId
+    data class ThirdParty(
+      @SerialName("sender") val sender: UserId,
+      @SerialName("mxid") val mxid: UserId,
+      @SerialName("token") val token: String,
     )
+  }
+
+  @Serializable data class Response(@SerialName("room_id") val roomId: RoomId)
 }

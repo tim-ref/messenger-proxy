@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,20 +23,17 @@ import io.kotest.matchers.compose.all
 import io.kotest.matchers.should
 
 // Checks https://spec.matrix.org/v1.3/client-server-api/#standard-error-response
-fun equalJsonMatrixStandardErrorResponse(errorResponse: ErrorResponse): Matcher<String?> = Matcher.all(
+fun equalJsonMatrixStandardErrorResponse(errorResponse: ErrorResponse): Matcher<String?> =
+  Matcher.all(
     beJsonObject(),
     containJsonKeyValue("$.errcode", errorResponse.errcode),
     containJsonKeyValue("$.error", errorResponse.error),
-)
+  )
 
 infix fun String?.shouldEqualJsonMatrixStandard(errorResponse: ErrorResponse) =
-    this should equalJsonMatrixStandardErrorResponse(errorResponse)
+  this should equalJsonMatrixStandardErrorResponse(errorResponse)
 
 data class ErrorResponse(val errcode: String, val error: String)
 
-
-fun jsonMatrixStandardErrorResponse(): Matcher<String?> = Matcher.all(
-    beJsonObject(),
-    containJsonKey("$.errcode"),
-    containJsonKey("$.error"),
-)
+fun jsonMatrixStandardErrorResponse(): Matcher<String?> =
+  Matcher.all(beJsonObject(), containJsonKey("$.errcode"), containJsonKey("$.error"))

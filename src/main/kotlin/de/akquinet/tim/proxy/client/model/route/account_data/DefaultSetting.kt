@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,18 +20,17 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * [A_25045 - Funktionsumfang der Berechtigungskonfiguration](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.0.0/#A_25045)
+ * [A_25045 - Funktionsumfang der
+ * Berechtigungskonfiguration](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.0.0/#A_25045)
  */
 @Serializable
 enum class DefaultSetting {
-    @SerialName("allow all")
-    ALLOW_ALL,
-
-    @SerialName("block all")
-    BLOCK_ALL,
+  @SerialName("allow all") ALLOW_ALL,
+  @SerialName("block all") BLOCK_ALL,
 }
 
-fun InviteRejectionPolicy.asDefaultSetting() = when (this) {
+fun InviteRejectionPolicy.asDefaultSetting() =
+  when (this) {
     InviteRejectionPolicy.ALLOW_ALL -> DefaultSetting.ALLOW_ALL
     InviteRejectionPolicy.BLOCK_ALL -> DefaultSetting.BLOCK_ALL
-}
+  }

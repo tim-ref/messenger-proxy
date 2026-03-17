@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,17 +23,14 @@ import io.ktor.http.*
 import io.ktor.server.testing.*
 import kotlin.test.Test
 
-
 class MetricsModuleTest {
-    @Test
-    fun `should offer metrics`() = testApplication {
-        application {
-            metricsModule()
-        }
-        val response = client.get("/metrics")
+  @Test
+  fun `should offer metrics`() = testApplication {
+    application { metricsModule() }
+    val response = client.get("/metrics")
 
-        response shouldHaveStatus HttpStatusCode.OK
-        response.bodyAsText() shouldContain "system_cpu_count"
-        response.bodyAsText() shouldContain "ktor_http_server_requests_active"
-    }
+    response shouldHaveStatus HttpStatusCode.OK
+    response.bodyAsText() shouldContain "system_cpu_count"
+    response.bodyAsText() shouldContain "ktor_http_server_requests_active"
+  }
 }

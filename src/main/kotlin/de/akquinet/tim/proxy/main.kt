@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,13 +30,7 @@ import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImp
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
 import de.akquinet.tim.proxy.client.InboundClientRoutes
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
-import de.akquinet.tim.proxy.contactmgmt.ContactManagementApi
-import de.akquinet.tim.proxy.contactmgmt.ContactManagementApiImpl
-import de.akquinet.tim.proxy.contactmgmt.ContactRoutes
-import de.akquinet.tim.proxy.contactmgmt.ContactRoutesImpl
-import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
-import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementServiceImpl
-import de.akquinet.tim.proxy.contactmgmt.database.DatabaseFactory
+import de.akquinet.tim.proxy.enforcer.RequestPolicyEnforcer
 import de.akquinet.tim.proxy.federation.FederationListCache
 import de.akquinet.tim.proxy.federation.FederationListCacheImpl
 import de.akquinet.tim.proxy.federation.InboundFederationRoutes
@@ -44,17 +38,25 @@ import de.akquinet.tim.proxy.federation.InboundFederationRoutesImpl
 import de.akquinet.tim.proxy.federation.OutboundFederationRoutes
 import de.akquinet.tim.proxy.federation.OutboundFederationRoutesImpl
 import de.akquinet.tim.proxy.logging.LogLevelService
+import de.akquinet.tim.proxy.orphanedrooms.OrphanedRoomChecker
+import de.akquinet.tim.proxy.orphanedrooms.OrphanedRoomCheckerImpl
+import de.akquinet.tim.proxy.orphanedrooms.OrphanedRoomCleanupService
+import de.akquinet.tim.proxy.orphanedrooms.OrphanedRoomCleanupServiceImpl
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.RawDataServiceImpl
 import de.akquinet.tim.proxy.synapse.SynapseService
 import de.akquinet.tim.proxy.synapse.client.SynapseClient
+import de.akquinet.tim.proxy.tiMessengerInformation.TIMessengerInformationService
 import de.akquinet.tim.proxy.tiMessengerInformation.TiMessengerInformationApi
-import de.akquinet.tim.proxy.validation.A26515ValidationService
-import de.akquinet.tim.proxy.validation.SendMessageValidationService
+import de.akquinet.tim.proxy.validation.RequestContentValidator
+import de.akquinet.tim.proxy.validation.SynapseAdminAPIValidator
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
+import java.security.Security
+import java.time.Clock
+import java.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
@@ -73,124 +75,118 @@ import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
-import java.security.Security
-import java.time.Duration
 
 private val klogger = KotlinLogging.logger {}
 
 suspend fun main(): Unit = coroutineScope {
-    // BC providers required for certificates and TLS cipher suites using brainpool curves
-    Security.insertProviderAt(BouncyCastleProvider(), 1)
-    Security.insertProviderAt(BouncyCastleJsseProvider(), 1)
+  // Suppress noisy BouncyCastle JSSE provider logs (uses java.util.logging)
+  java.util.logging.Logger.getLogger("org.bouncycastle").level = java.util.logging.Level.WARNING
 
-    val filePath = System.getenv("CONFIGURATION_FILE_PATH")
-    val config = loadProxyConfiguration(filePath)
+  // BC providers required for certificates and TLS cipher suites using brainpool curves
+  Security.insertProviderAt(BouncyCastleProvider(), 1)
+  Security.insertProviderAt(BouncyCastleJsseProvider(), 1)
 
-    val koin = initiateKoin(config)
+  val filePath = System.getenv("CONFIGURATION_FILE_PATH")
+  val config = loadProxyConfiguration(filePath)
 
-    launch { koin.get<FederationListCacheImpl>().start() }
-    launch { koin.get<InboundProxy>().start() }
-    launch { koin.get<OutboundProxy>().start() }
-    launch { koin.get<ActuatorRoutes>().start() }
-    launch { koin.get<ContactManagementApiImpl>().start() }
-    launch { koin.get<TiMessengerInformationApi>().start() }
+  val koin = initiateKoin(config)
+
+  launch { koin.get<FederationListCacheImpl>().start() }
+  launch { koin.get<InboundProxy>().start() }
+  launch { koin.get<OutboundProxy>().start() }
+  launch { koin.get<ActuatorRoutes>().start() }
+  launch { koin.get<TiMessengerInformationApi>().start() }
+  launch { koin.get<OrphanedRoomCleanupServiceImpl>().start() }
 }
 
-private fun initiateKoin(config: ProxyConfiguration) = koinApplication {
-
-    modules(
+private fun initiateKoin(config: ProxyConfiguration) =
+  koinApplication {
+      modules(
         module {
+          single { config }
+          single { config.federationListCache }
+          single { config.inboundProxy }
+          single { config.outboundProxy }
+          single { config.actuatorConfig }
+          single { config.registrationServiceConfig }
+          single { config.prometheusClient }
+          single { config.logInfoConfig }
+          single { config.logLevelResetConfig }
+          single { config.timAuthorizationCheckConfiguration }
+          single { config.tiMessengerInformationConfiguration }
+          single { config.httpClientConfig }
+          single { config.synapse.adminApi }
+          single { config.orphanedRoomCleanup }
+          single { FileSystem.SYSTEM }
 
-            single { config }
-            single { config.federationListCache }
-            single { config.inboundProxy }
-            single { config.outboundProxy }
-            single { config.actuatorConfig }
-            single { config.database }
-            single { config.registrationServiceConfig }
-            single { config.contactManagement }
-            single { config.prometheusClient }
-            single { config.logInfoConfig }
-            single { config.logLevelResetConfig }
-            single { config.timAuthorizationCheckConfiguration }
-            single { config.tiMessengerInformationConfiguration }
-            single { config.httpClientConfig }
-            single { config.synapse.adminApi }
-            single { FileSystem.SYSTEM }
+          val generalHttpClient = createGeneralHttpClient(config)
+          InterceptorInstaller(generalHttpClient).install()
 
-            configureDatabase(config)
+          single { generalHttpClient }
+          single { OkHttp.create() } // default HttpClientEngine
+          single { MatrixApiClient() }
+          single { createMatrixEventJson() }
+          single { createDefaultEventContentSerializerMappings() }
+          single { Clock.systemUTC() }
 
-            val generalHttpClient = createGeneralHttpClient(config)
-            InterceptorInstaller(generalHttpClient).install()
-
-            single { generalHttpClient }
-            single { OkHttp.create() } // default HttpClientEngine
-            single { MatrixApiClient() }
-            single { createMatrixEventJson() }
-            single { createDefaultEventContentSerializerMappings() }
-
-            singleOf(::MatrixOpenIdClient).bind()
-            singleOf(::LogLevelService).bind()
-            singleOf(::ContactRoutesImpl).bind<ContactRoutes>()
-            singleOf(::ContactManagementServiceImpl).bind<ContactManagementService>()
-            singleOf(::MatrixAuthorizationServiceImpl).bind<MatrixAuthorizationService>()
-            singleOf(::VZDPublicIDCheckImpl).bind<VZDPublicIDCheck>()
-            singleOf(::FederationListCacheImpl).bind<FederationListCache>()
-            singleOf(::InboundFederationRoutesImpl).bind<InboundFederationRoutes>()
-            singleOf(::OutboundFederationRoutesImpl).bind<OutboundFederationRoutes>()
-            singleOf(::OutboundProxyCertificateManagerImpl).bind<OutboundProxyCertificateManager>()
-            singleOf(::AccessTokenToUserIdImpl).bind<AccessTokenToUserId>()
-            singleOf(::AccessTokenToUserIdAuthenticationFunctionImpl).bind<AccessTokenToUserIdAuthenticationFunction>()
-            singleOf(::InboundClientRoutesImpl).bind<InboundClientRoutes>()
-            singleOf(::InboundProxyImpl).bind<InboundProxy>()
-            singleOf(::OutboundProxyImpl).bind<OutboundProxy>()
-            singleOf(::ActuatorRoutesImpl).bind<ActuatorRoutes>()
-            singleOf(::RawDataServiceImpl).bind<RawDataService>()
-            singleOf(::ContactManagementApiImpl).bind<ContactManagementApi>()
-            singleOf(::BerechtigungsstufeEinsService) { bind<BerechtigungsstufeEinsService>() }
-            singleOf(::TiMessengerInformationApi) { bind<TiMessengerInformationApi>() }
-            singleOf(::SendMessageValidationService) { bind<SendMessageValidationService>() }
-            singleOf(::SynapseClient) { bind<SynapseClient>() }
-            singleOf(::SynapseService) { bind<SynapseService>() }
-            singleOf(::A26515ValidationService) { bind<A26515ValidationService>() }
-        })
-}.koin
+          singleOf(::MatrixOpenIdClient).bind()
+          singleOf(::LogLevelService).bind()
+          singleOf(::MatrixAuthorizationServiceImpl).bind<MatrixAuthorizationService>()
+          singleOf(::FederationListCacheImpl).bind<FederationListCache>()
+          singleOf(::InboundFederationRoutesImpl).bind<InboundFederationRoutes>()
+          singleOf(::OutboundFederationRoutesImpl).bind<OutboundFederationRoutes>()
+          singleOf(::OutboundProxyCertificateManagerImpl).bind<OutboundProxyCertificateManager>()
+          singleOf(::AccessTokenToUserIdImpl).bind<AccessTokenToUserId>()
+          singleOf(::AccessTokenToUserIdAuthenticationFunctionImpl)
+            .bind<AccessTokenToUserIdAuthenticationFunction>()
+          singleOf(::InboundClientRoutesImpl).bind<InboundClientRoutes>()
+          singleOf(::InboundProxyImpl).bind<InboundProxy>()
+          singleOf(::OutboundProxyImpl).bind<OutboundProxy>()
+          singleOf(::ActuatorRoutesImpl).bind<ActuatorRoutes>()
+          singleOf(::RawDataServiceImpl).bind<RawDataService>()
+          singleOf(::BerechtigungsstufeEinsService) { bind<BerechtigungsstufeEinsService>() }
+          singleOf(::TiMessengerInformationApi) { bind<TiMessengerInformationApi>() }
+          singleOf(::RequestContentValidator) { bind<RequestContentValidator>() }
+          singleOf(::SynapseClient) { bind<SynapseClient>() }
+          singleOf(::SynapseService) { bind<SynapseService>() }
+          singleOf(::SynapseAdminAPIValidator) { bind<SynapseAdminAPIValidator>() }
+          singleOf(::RequestPolicyEnforcer) { bind<RequestPolicyEnforcer>() }
+          singleOf(::TIMessengerInformationService) { bind<TIMessengerInformationService>() }
+          singleOf(::OrphanedRoomCheckerImpl).bind<OrphanedRoomChecker>()
+          singleOf(::OrphanedRoomCleanupServiceImpl).bind<OrphanedRoomCleanupService>()
+        }
+      )
+    }
+    .koin
 
 private fun createGeneralHttpClient(config: ProxyConfiguration): HttpClient {
-    val generalHttpClient = HttpClient(OkHttp) {
-        install(ContentNegotiation) {
-            json()
-        }
-        followRedirects = false
-        engine {
-            config {
-                connectTimeout(30.seconds.toJavaDuration())
-                readTimeout(2.minutes.toJavaDuration())
-                callTimeout(Duration.ZERO) // disables call timeout
-                dispatcher(
-                    Dispatcher().apply {
-                        maxRequests = config.httpClientConfig.maxRequests
-                        maxRequestsPerHost = config.httpClientConfig.maxRequestsPerHost
-                    }
-                )
+  val generalHttpClient =
+    HttpClient(OkHttp) {
+      install(ContentNegotiation) { json() }
+      followRedirects = false
+      engine {
+        config {
+          connectTimeout(30.seconds.toJavaDuration())
+          readTimeout(2.minutes.toJavaDuration())
+          callTimeout(Duration.ZERO) // disables call timeout
+          dispatcher(
+            Dispatcher().apply {
+              maxRequests = config.httpClientConfig.maxRequests
+              maxRequestsPerHost = config.httpClientConfig.maxRequestsPerHost
             }
+          )
         }
-        klogger.info {
-            "Setup of module HttpClient finished. maxRequest=${config.httpClientConfig.maxRequests} maxRequestsPerHost=${config.httpClientConfig.maxRequestsPerHost}"
-        }
+      }
+      klogger.info {
+        "Setup of module HttpClient finished. maxRequest=${config.httpClientConfig.maxRequests} maxRequestsPerHost=${config.httpClientConfig.maxRequestsPerHost}"
+      }
     }
-    return generalHttpClient
+  return generalHttpClient
 }
 
-private fun loadProxyConfiguration(filePath: String) = ConfigLoaderBuilder.default()
+private fun loadProxyConfiguration(filePath: String) =
+  ConfigLoaderBuilder.default()
     .addParser("yml", YamlParser())
     .addResourceOrFileSource(filePath)
     .build()
     .loadConfigOrThrow<ProxyConfiguration>()
-
-private fun configureDatabase(config: ProxyConfiguration) {
-    //flyway migrate
-    DatabaseFactory.migrate(config.database)
-    //DB Connection
-    DatabaseFactory.init(config.database)
-}

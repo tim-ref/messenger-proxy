@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,22 +19,23 @@ import io.ktor.client.utils.*
 import io.ktor.http.*
 import io.ktor.util.*
 
-fun Headers.filterUnsafeHeaders(): Headers =
-    buildHeaders {
-        appendFiltered(this@filterUnsafeHeaders, keepEmpty = true) { name, _ -> !HttpHeaders.isUnsafe(name) }
+fun Headers.filterUnsafeHeaders(): Headers = buildHeaders {
+  appendFiltered(this@filterUnsafeHeaders, keepEmpty = true) { name, _ ->
+    !HttpHeaders.isUnsafe(name)
+  }
 
-        // Fehler im Synapse wegen doppeleten contentLength Header:
-        // Wenn man OutgoingContent nutzt, sind dort bereits contentLength und contentType definiert.
-        // Wenn man es zusätzlich in die headers packt, sendet ktor einfach beide, was andere services
-        // und clients gerne mal ablehnen.
-        remove(HttpHeaders.ContentLength)
-    }
+  // Fehler im Synapse wegen doppeleten contentLength Header:
+  // Wenn man OutgoingContent nutzt, sind dort bereits contentLength und contentType definiert.
+  // Wenn man es zusätzlich in die headers packt, sendet ktor einfach beide, was andere services
+  // und clients gerne mal ablehnen.
+  remove(HttpHeaders.ContentLength)
+}
 
- val Headers.isChunkedTransferEncoding: Boolean
-    get() = get(HttpHeaders.TransferEncoding)?.contains("chunked") ?: false
+val Headers.isChunkedTransferEncoding: Boolean
+  get() = get(HttpHeaders.TransferEncoding)?.contains("chunked") ?: false
 
 val Headers.contentType: ContentType?
-    get() = get(HttpHeaders.ContentType)?.let { ContentType.parse(it) }
+  get() = get(HttpHeaders.ContentType)?.let { ContentType.parse(it) }
 
 val Headers.contentLength: Long?
-    get() = get(HttpHeaders.ContentLength)?.toLong()
+  get() = get(HttpHeaders.ContentLength)?.toLong()

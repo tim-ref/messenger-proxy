@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,10 +22,7 @@ import kotlinx.serialization.Serializable
  * [A_25258](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.0.0/#A_25258)
  * [JSON schema](https://github.com/gematik/api-ti-messenger/blob/main/src/schema/permissionConfig.json)
  */
-@Serializable
-data class PermissionConfig(
-    val defaultSetting: DefaultSetting,
-)
+@Serializable data class PermissionConfig(val defaultSetting: DefaultSetting)
 
 fun ProxyConfiguration.TimAuthorizationCheckConfiguration.asPermissionConfig() =
-    PermissionConfig(this.inviteRejectionPolicy.asDefaultSetting())
+  PermissionConfig(this.inviteRejectionPolicy.asDefaultSetting())

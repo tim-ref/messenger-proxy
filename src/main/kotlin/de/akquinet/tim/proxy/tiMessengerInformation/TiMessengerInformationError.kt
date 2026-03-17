@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,23 +16,25 @@
 package de.akquinet.tim.proxy.tiMessengerInformation
 
 import de.akquinet.tim.proxy.authorization.MatrixAuthorizationError
-import de.akquinet.tim.proxy.commons.GeneralError
-import io.ktor.http.*
+import de.akquinet.tim.proxy.commons.HttpFailure
+import io.ktor.http.HttpStatusCode
 
-sealed interface TiMessengerInformationError : GeneralError {
-    data class Unauthorized(val reason: MatrixAuthorizationError) : TiMessengerInformationError {
-        override val message = reason.message
+sealed interface TiMessengerInformationError : HttpFailure {
+  data class Unauthorized(val reason: MatrixAuthorizationError) : TiMessengerInformationError {
+    override val message = reason.message
+  }
+
+  data class MissingParameter(override val message: String) : TiMessengerInformationError
+
+  data class NoMatch(override val message: String) : TiMessengerInformationError
+
+  fun statusCode(): HttpStatusCode =
+    when (this) {
+      is Unauthorized -> HttpStatusCode.Unauthorized
+      is MissingParameter -> HttpStatusCode.BadRequest
+      is NoMatch -> HttpStatusCode.NotFound
     }
 
-    data class MissingParameter(override val message: String) : TiMessengerInformationError
-
-    data class NoMatch(override val message: String) : TiMessengerInformationError
-
-    fun statusCode(): HttpStatusCode = when (this) {
-        is Unauthorized -> HttpStatusCode.Unauthorized
-        is MissingParameter -> HttpStatusCode.BadRequest
-        is NoMatch -> HttpStatusCode.NotFound
-    }
-
-    fun toErrorResult(): ErrorResult = ErrorResult(errorCode = statusCode().value.toString(), errorMessage = message)
+  fun toErrorResult(): ErrorResult =
+    ErrorResult(errorCode = statusCode().value.toString(), errorMessage = message)
 }

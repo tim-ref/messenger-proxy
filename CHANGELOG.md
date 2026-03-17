@@ -14,6 +14,22 @@ All notable changes to this project will be documented in this file.
 <!--
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 -->
+
+## [0.11.0]
+
+### Added
+
+- Reject redaction events if the event to be redacted is older than 24 hours based on its "origin_server_ts" (A_28358)
+- Reject set state events which try to set the room's join_rule to public (A_28271)
+- Reject room creation with type "de.gematik.tim.roomtype.default.v2" (A_28596)
+- Added m.federate=false to public room creation requests.
+- Reject invitations based on invitation policy (A_26021-01)
+- Periodic deletion of orphaned rooms that contain only state events older than 14 days with no members except the creator (A_28564-01)
+
+### Removed
+
+- Removed join_rules check for federated make_join and send_join requests.
+
 ## [0.10.0] (published on 2025-12-01)
 
 ### Fixed

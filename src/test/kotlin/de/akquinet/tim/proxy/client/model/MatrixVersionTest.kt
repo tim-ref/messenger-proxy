@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,72 +21,98 @@ import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldNotContainAnyOf
 import io.kotest.matchers.shouldBe
 
-class MatrixVersionTest : ShouldSpec({
-
+class MatrixVersionTest :
+  ShouldSpec({
     should("should parse proper version string") {
-        val mVersion = MatrixVersion("v1.3")
-        mVersion.version shouldBe "v1.3"
-        mVersion.major shouldBe 1
-        mVersion.minor shouldBe 3
-        mVersion.patch shouldBe 0
+      val mVersion = MatrixVersion("v1.3")
+      mVersion.version shouldBe "v1.3"
+      mVersion.major shouldBe 1
+      mVersion.minor shouldBe 3
+      mVersion.patch shouldBe 0
     }
 
     should("should throw if invalid string is handed in for parsing") {
-        shouldThrow<IllegalArgumentException> {
-            MatrixVersion("invalid.version.string")
-        }
+      shouldThrow<IllegalArgumentException> { MatrixVersion("invalid.version.string") }
     }
 
     should("should compare to equal") {
-        val one = MatrixVersion("v1.3")
-        val two = MatrixVersion("v1.3")
+      val one = MatrixVersion("v1.3")
+      val two = MatrixVersion("v1.3")
 
-        (one == two) shouldBe true
-        (one <= two) shouldBe true
-        (one >= two) shouldBe true
-        (one > two) shouldBe false
-        (one < two) shouldBe false
-        (one != two) shouldBe false
+      (one == two) shouldBe true
+      (one <= two) shouldBe true
+      (one >= two) shouldBe true
+      (one > two) shouldBe false
+      (one < two) shouldBe false
+      (one != two) shouldBe false
     }
 
     should("should compare to smaller than or equal") {
-        val one = MatrixVersion("v1.3")
-        val two = MatrixVersion("v1.4")
+      val one = MatrixVersion("v1.3")
+      val two = MatrixVersion("v1.4")
 
-        (one < two) shouldBe true
-        (one <= two) shouldBe true
-        (one != two) shouldBe true
-        (one > two) shouldBe false
-        (one >= two) shouldBe false
-        (one == two) shouldBe false
+      (one < two) shouldBe true
+      (one <= two) shouldBe true
+      (one != two) shouldBe true
+      (one > two) shouldBe false
+      (one >= two) shouldBe false
+      (one == two) shouldBe false
     }
 
     should("should compare to greater than or equal") {
-        val one = MatrixVersion("v1.3")
-        val two = MatrixVersion("v1.2")
+      val one = MatrixVersion("v1.3")
+      val two = MatrixVersion("v1.2")
 
-        (one > two) shouldBe true
-        (one >= two) shouldBe true
-        (one != two) shouldBe true
-        (one == two) shouldBe false
-        (one < two) shouldBe false
-        (one <= two) shouldBe false
+      (one > two) shouldBe true
+      (one >= two) shouldBe true
+      (one != two) shouldBe true
+      (one == two) shouldBe false
+      (one < two) shouldBe false
+      (one <= two) shouldBe false
     }
 
     should("find only versions less than or equal to v1.3") {
-        val maxVersion = MatrixVersion("v1.3")
-        val allVersionStrings = setOf("r0.0.1","r0.1.0","r0.2.0","r0.3.0","r0.4.0","r0.5.0","r0.6.0","r0.6.1","v1.1","v1.2","v1.3","v1.4","v1.5","v1.6")
-        val filteredVersions = allVersionStrings
-            .map { MatrixVersion(it) }
-            .filter { it <= maxVersion }
+      val maxVersion = MatrixVersion("v1.3")
+      val allVersionStrings =
+        setOf(
+          "r0.0.1",
+          "r0.1.0",
+          "r0.2.0",
+          "r0.3.0",
+          "r0.4.0",
+          "r0.5.0",
+          "r0.6.0",
+          "r0.6.1",
+          "v1.1",
+          "v1.2",
+          "v1.3",
+          "v1.4",
+          "v1.5",
+          "v1.6",
+        )
+      val filteredVersions = allVersionStrings.map { MatrixVersion(it) }.filter { it <= maxVersion }
 
-        val filteredVersionStrings = listOf("r0.0.1","r0.1.0","r0.2.0","r0.3.0","r0.4.0","r0.5.0","r0.6.0","r0.6.1","v1.1","v1.2","v1.3")
+      val filteredVersionStrings =
+        listOf(
+          "r0.0.1",
+          "r0.1.0",
+          "r0.2.0",
+          "r0.3.0",
+          "r0.4.0",
+          "r0.5.0",
+          "r0.6.0",
+          "r0.6.1",
+          "v1.1",
+          "v1.2",
+          "v1.3",
+        )
 
-        filteredVersions.size shouldBe 11
-        filteredVersions shouldContainAll filteredVersionStrings.map { MatrixVersion(it) }
-        filteredVersions shouldNotContainAnyOf listOf("v1.4","v1.5","v1.6").map { MatrixVersion(it) }
+      filteredVersions.size shouldBe 11
+      filteredVersions shouldContainAll filteredVersionStrings.map { MatrixVersion(it) }
+      filteredVersions shouldNotContainAnyOf
+        listOf("v1.4", "v1.5", "v1.6").map { MatrixVersion(it) }
 
-        // all the way back to
-        filteredVersions.map { it.version } shouldContainAll filteredVersionStrings
+      // all the way back to
+      filteredVersions.map { it.version } shouldContainAll filteredVersionStrings
     }
-})
+  })

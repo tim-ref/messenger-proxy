@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,50 +23,46 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class RawDataMessage(
-    @SerialName("Inst-ID") val instanceId: String = "n/a",
-    @SerialName("M-Dom") val matrixDomain: String = "n/a",
-    @SerialName("UA-A") val userAgentAuspraegung: UserAgent.Auspraegung = UserAgent.Auspraegung.UNKNOWN,
-    @SerialName("UA-cid") val userAgentClientId: String = "n/a",
-    @SerialName("UA-OS-VERSION") val userAgentOSVersion: String = "n/a",
-    @SerialName("UA-OS") val userAgentOS: String = "n/a",
-    @SerialName("UA-P") val userAgentPlatform: UserAgent.Plattform = UserAgent.Plattform.UNKNOWN,
-    @SerialName("UA-PTV") val userAgentProdukttypversion: String = "n/a",
-    @SerialName("UA-PV") val userAgentProduktversion: String = "n/a",
-    @SerialName("profOID") val professionOID: String,
-    @SerialName("Res") val responseHttpStatusCode: Int, // status code http
-    @SerialName("sizeIn") val requestContentLength: Long = 0,
-    @SerialName("sizeOut") val responseContentLength: Long = 0,
-    @SerialName("tID") val telematikID: String = "n/a"
+  @SerialName("Inst-ID") val instanceId: String = "n/a",
+  @SerialName("M-Dom") val matrixDomain: String = "n/a",
+  @SerialName("UA-A")
+  val userAgentAuspraegung: UserAgent.Auspraegung = UserAgent.Auspraegung.UNKNOWN,
+  @SerialName("UA-cid") val userAgentClientId: String = "n/a",
+  @SerialName("UA-OS-VERSION") val userAgentOSVersion: String = "n/a",
+  @SerialName("UA-OS") val userAgentOS: String = "n/a",
+  @SerialName("UA-P") val userAgentPlatform: UserAgent.Plattform = UserAgent.Plattform.UNKNOWN,
+  @SerialName("UA-PTV") val userAgentProdukttypversion: String = "n/a",
+  @SerialName("UA-PV") val userAgentProduktversion: String = "n/a",
+  @SerialName("profOID") val professionOID: String,
+  @SerialName("Res") val responseHttpStatusCode: Int, // status code http
+  @SerialName("sizeIn") val requestContentLength: Long = 0,
+  @SerialName("sizeOut") val responseContentLength: Long = 0,
+  @SerialName("tID") val telematikID: String = "n/a",
 )
 
 @Serializable
 data class RawDataMetaData(
-    val start: Instant,
-    val durationInMs: Long,
-    val operation: Operation?,
-    val status: Int,
-    val message: RawDataMessage
+  val start: Instant,
+  val durationInMs: Long,
+  val operation: Operation?,
+  val status: Int,
+  val message: RawDataMessage,
 )
 
 class UserAgent {
 
-    @Serializable(with = AuspraegungSerializer::class)
-    enum class Auspraegung(
-        val serialized: String
-    ) {
-        UNKNOWN("n/a"),
-        ORG_ADMIN_CLIENT("Org-Admin-Client"),
-        MESSENGER_CLIENT("Messenger-Client");
-    }
+  @Serializable(with = AuspraegungSerializer::class)
+  enum class Auspraegung(val serialized: String) {
+    UNKNOWN("n/a"),
+    ORG_ADMIN_CLIENT("Org-Admin-Client"),
+    MESSENGER_CLIENT("Messenger-Client"),
+  }
 
-    @Serializable(with = PlatformSerializer::class)
-    enum class Plattform(
-        val serialized: String
-    ) {
-        UNKNOWN("n/a"),
-        MOBIL("mobil"),
-        STATIONAER("stationaer"),
-        WEB("web");
-    }
+  @Serializable(with = PlatformSerializer::class)
+  enum class Plattform(val serialized: String) {
+    UNKNOWN("n/a"),
+    MOBIL("mobil"),
+    STATIONAER("stationaer"),
+    WEB("web"),
+  }
 }
-

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,13 @@
  */
 package de.akquinet.tim.proxy.client
 
+import de.akquinet.tim.proxy.ProxyConfiguration
 import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import de.akquinet.tim.proxy.ProxyConfiguration
 import net.folivo.trixnity.api.client.MatrixApiClient
 import net.folivo.trixnity.clientserverapi.model.authentication.WhoAmI
 import net.folivo.trixnity.core.model.UserId
@@ -29,34 +29,37 @@ import net.folivo.trixnity.core.model.UserId
 interface AccessTokenToUserId : suspend (String) -> UserId
 
 class AccessTokenToUserIdImpl(
-    private val config: ProxyConfiguration.InboundProxyConfiguration,
-    private val matrixApiClient: MatrixApiClient,
+  private val config: ProxyConfiguration.InboundProxyConfiguration,
+  private val matrixApiClient: MatrixApiClient,
 ) : AccessTokenToUserId {
-    private data class CachedUserId(
-        val userId: UserId,
-        val cachedAt: Instant,
-    )
+  private data class CachedUserId(val userId: UserId, val cachedAt: Instant)
 
-    private val cache = MutableStateFlow<Map<String, CachedUserId>>(mapOf())
-    override suspend fun invoke(accessToken: String): UserId {
-        val cachedUserId = cache.value[accessToken]
-        return if (cachedUserId != null
-            && cachedUserId.cachedAt < (Clock.System.now() + config.accessTokenToUserIdCacheDuration)
-        ) {
-            cachedUserId.userId
-        } else {
-            val fetchedUserId = matrixApiClient.request(WhoAmI()) {
-                bearerAuth(accessToken)
-                url {
-                    Url(config.homeserverUrl).also {
-                        protocol = it.protocol
-                        host = it.host
-                        port = it.port
-                    }
-                }
-            }.getOrThrow().userId
-            cache.update { it + (accessToken to CachedUserId(fetchedUserId, Clock.System.now())) }
-            fetchedUserId
-        }
+  private val cache = MutableStateFlow<Map<String, CachedUserId>>(mapOf())
+
+  override suspend fun invoke(accessToken: String): UserId {
+    val cachedUserId = cache.value[accessToken]
+    return if (
+      cachedUserId != null &&
+        cachedUserId.cachedAt < (Clock.System.now() + config.accessTokenToUserIdCacheDuration)
+    ) {
+      cachedUserId.userId
+    } else {
+      val fetchedUserId =
+        matrixApiClient
+          .request(WhoAmI()) {
+            bearerAuth(accessToken)
+            url {
+              Url(config.homeserverUrl).also {
+                protocol = it.protocol
+                host = it.host
+                port = it.port
+              }
+            }
+          }
+          .getOrThrow()
+          .userId
+      cache.update { it + (accessToken to CachedUserId(fetchedUserId, Clock.System.now())) }
+      fetchedUserId
     }
+  }
 }

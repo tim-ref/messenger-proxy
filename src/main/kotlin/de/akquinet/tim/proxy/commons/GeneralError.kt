@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,24 @@
  */
 package de.akquinet.tim.proxy.commons
 
+import de.akquinet.tim.proxy.extensions.toErrorResponse
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.HttpStatusCode.Companion.Forbidden
+import net.folivo.trixnity.core.ErrorResponse
+
 interface GeneralError {
-    val message: String
+  val message: String
+}
+
+interface HttpFailure : GeneralError {
+  val httpStatusCode: HttpStatusCode
+    get() = Forbidden
+
+  val errorResponse: ErrorResponse
+    get() = httpStatusCode.toErrorResponse(message)
+}
+
+interface HttpFailureWithException : HttpFailure {
+  val exception: Throwable?
+    get() = null
 }

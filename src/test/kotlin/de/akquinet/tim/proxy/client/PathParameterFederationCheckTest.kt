@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,60 +36,55 @@ import io.ktor.server.routing.*
 import io.ktor.server.testing.*
 import kotlinx.coroutines.flow.update
 
-class PathParameterFederationCheckTest : ShouldSpec({
-
+class PathParameterFederationCheckTest :
+  ShouldSpec({
     fun io.ktor.server.application.Application.testModule() {
-        val federationListCacheMock = FederationListCacheMock()
-        federationListCacheMock.domains.update {
-            it + FederationList.FederationDomain(
-                domain = "federated",
-                isInsurance = true,
-                telematikID = "telematik"
-            )
-        }
-        val berechtigungsstufeEinsService = BerechtigungsstufeEinsService(federationListCacheMock)
+      val federationListCacheMock = FederationListCacheMock()
+      federationListCacheMock.domains.update {
+        it +
+          FederationList.FederationDomain(
+            domain = "federated",
+            isInsurance = true,
+            telematikID = "telematik",
+          )
+      }
+      val berechtigungsstufeEinsService = BerechtigungsstufeEinsService(federationListCacheMock)
 
-        install(ContentNegotiation) {
-            json()
-        }
+      install(ContentNegotiation) { json() }
 
-        routing {
-            install(PathParameterFederationCheck) {
-                service = berechtigungsstufeEinsService
-            }
-            get("/{serverName}") {
-                call.respond("I'm a resource")
-            }
-        }
+      routing {
+        install(PathParameterFederationCheck) { service = berechtigungsstufeEinsService }
+        get("/{serverName}") { _ -> call.respond("I'm a resource") }
+      }
     }
 
     // A_25534 - Fehlschlag Föderationsprüfung
     // https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.1.1/#A_25534
     should("reject requests for media from unfederated servers") {
-        testApplication {
-            application { testModule() }
+      testApplication {
+        application { testModule() }
 
-            val response = client.get("/unfederated")
+        val response = client.get("/unfederated")
 
-            response shouldHaveStatus Forbidden
-            response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
-            response.bodyAsText() shouldEqualJson """
+        response shouldHaveStatus Forbidden
+        response.shouldHaveContentType(Application.Json.withCharset(Charsets.UTF_8))
+        response.bodyAsText() shouldEqualJson
+          """
                     { 
                       "errcode": "M_FORBIDDEN",  
                       "error": "unfederated kann nicht in der Föderation gefunden werden"  
                     }
                 """
-        }
+      }
     }
 
     should("allow requests for resources of federated servers") {
-        testApplication {
-            application { testModule() }
+      testApplication {
+        application { testModule() }
 
-            val response = client.get("/federated")
+        val response = client.get("/federated")
 
-            response.bodyAsText() shouldBe "I'm a resource"
-        }
+        response.bodyAsText() shouldBe "I'm a resource"
+      }
     }
-
-})
+  })

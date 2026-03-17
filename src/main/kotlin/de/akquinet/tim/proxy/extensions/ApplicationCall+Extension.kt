@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,31 +24,22 @@ import io.ktor.server.application.*
 import io.ktor.server.response.*
 
 suspend fun ApplicationCall.unauthorized(message: String = "UNAUTHORIZED") =
-    this.respond(Unauthorized, message)
+  this.respond(Unauthorized, message)
 
 suspend fun ApplicationCall.badRequest(message: String) =
-    this.respond(
-        status = BadRequest,
-        message = Error(
-            errorCode = BadRequest.toString(),
-            errorMessage = message
-        )
-    )
+  this.respond(
+    status = BadRequest,
+    message = Error(errorCode = BadRequest.toString(), errorMessage = message),
+  )
 
 suspend fun ApplicationCall.notFound(message: String) =
-    this.respond(
-        status = NotFound,
-        message = Error(
-            errorCode = NotFound.toString(),
-            errorMessage = message
-        )
-    )
+  this.respond(
+    status = NotFound,
+    message = Error(errorCode = NotFound.toString(), errorMessage = message),
+  )
 
 suspend fun ApplicationCall.internalServerError(message: String) =
-    this.respond(
-        InternalServerError,
-        Error(
-            errorCode = InternalServerError.toString(),
-            errorMessage = message
-        )
-    )
+  this.respond(
+    InternalServerError,
+    Error(errorCode = InternalServerError.toString(), errorMessage = message),
+  )

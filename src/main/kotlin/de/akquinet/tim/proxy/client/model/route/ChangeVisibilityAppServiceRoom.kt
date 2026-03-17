@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,24 +23,22 @@ import net.folivo.trixnity.core.HttpMethodType
 import net.folivo.trixnity.core.MatrixEndpoint
 
 /**
- * @see <a href="https://spec.matrix.org/v1.3/application-service-api/#put_matrixclientv3directorylistappservicenetworkidroomid">matrix spec</a>
+ * @see <a
+ *   href="https://spec.matrix.org/v1.3/application-service-api/#put_matrixclientv3directorylistappservicenetworkidroomid">matrix
+ *   spec</a>
  */
-
 @Serializable
 @Resource("/_matrix/client/v3/directory/list/appservice/{networkId}/{roomId}")
 @HttpMethod(HttpMethodType.PUT)
 data class ChangeVisibilityAppServiceRoom(
-    @SerialName("networkId") val networkId: String,
-    @SerialName("roomId") val roomId: String,
+  @SerialName("networkId") val networkId: String,
+  @SerialName("roomId") val roomId: String,
 ) : MatrixEndpoint<ChangeVisibilityAppServiceRoom.Request, Unit> {
-    @Serializable
-    data class Request(
-        @SerialName("visibility") val visibility: Visibility
-    )
+  @Serializable data class Request(@SerialName("visibility") val visibility: Visibility)
 
-    @Serializable
-    enum class Visibility {
-        @SerialName("public") PUBLIC,
-        @SerialName("private") PRIVATE
-    }
+  @Serializable
+  enum class Visibility {
+    @SerialName("public") PUBLIC,
+    @SerialName("private") PRIVATE,
+  }
 }

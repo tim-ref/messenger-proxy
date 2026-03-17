@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,14 @@
 package de.akquinet.tim.proxy.mocks
 
 import de.akquinet.tim.proxy.federation.FederationList
-import kotlinx.coroutines.flow.MutableStateFlow
 import de.akquinet.tim.proxy.federation.FederationListCache
+import kotlinx.coroutines.flow.MutableStateFlow
 
-class FederationListCacheMock(domains: Set<FederationList.FederationDomain> = emptySet()) : FederationListCache {
-    override val domains: MutableStateFlow<Set<FederationList.FederationDomain>> = MutableStateFlow(domains)
+class FederationListCacheMock(domains: Set<FederationList.FederationDomain> = emptySet()) :
+  FederationListCache {
+  override val domains: MutableStateFlow<Set<FederationList.FederationDomain>> =
+    MutableStateFlow(domains)
 }
 
 fun federationListCacheOf(vararg domain: FederationList.FederationDomain): FederationListCache =
-    FederationListCacheMock(setOf(*domain))
+  FederationListCacheMock(setOf(*domain))

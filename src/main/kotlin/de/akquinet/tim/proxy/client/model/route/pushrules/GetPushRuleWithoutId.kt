@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,23 +32,24 @@ import net.folivo.trixnity.core.serialization.events.EventContentSerializerMappi
 @Resource("/_matrix/client/v3/pushrules/{scope}/{kind}/")
 @HttpMethod(HttpMethodType.GET)
 data class GetPushRuleWithoutId(
-    @SerialName("scope") val scope: String,
-    @SerialName("kind") val kind: PushRuleKind,
-    @SerialName("user_id") val asUserId: UserId? = null
+  @SerialName("scope") val scope: String,
+  @SerialName("kind") val kind: PushRuleKind,
+  @SerialName("user_id") val asUserId: UserId? = null,
 ) : MatrixEndpoint<Unit, PushRule> {
-    override fun responseSerializerBuilder(
-        mappings: EventContentSerializerMappings,
-        json: Json,
-        value: PushRule?
-    ): KSerializer<PushRule> {
-        val serializer = when (kind) {
-            PushRuleKind.OVERRIDE -> PushRule.Override.serializer()
-            PushRuleKind.CONTENT -> PushRule.Content.serializer()
-            PushRuleKind.ROOM -> PushRule.Room.serializer()
-            PushRuleKind.SENDER -> PushRule.Sender.serializer()
-            PushRuleKind.UNDERRIDE -> PushRule.Underride.serializer()
-        }
-        @Suppress("UNCHECKED_CAST")
-        return serializer as KSerializer<PushRule>
-    }
+  override fun responseSerializerBuilder(
+    mappings: EventContentSerializerMappings,
+    json: Json,
+    value: PushRule?,
+  ): KSerializer<PushRule> {
+    val serializer =
+      when (kind) {
+        PushRuleKind.OVERRIDE -> PushRule.Override.serializer()
+        PushRuleKind.CONTENT -> PushRule.Content.serializer()
+        PushRuleKind.ROOM -> PushRule.Room.serializer()
+        PushRuleKind.SENDER -> PushRule.Sender.serializer()
+        PushRuleKind.UNDERRIDE -> PushRule.Underride.serializer()
+      }
+    @Suppress("UNCHECKED_CAST")
+    return serializer as KSerializer<PushRule>
+  }
 }

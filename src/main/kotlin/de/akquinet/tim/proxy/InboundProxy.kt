@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,107 +41,102 @@ import net.folivo.trixnity.core.serialization.createMatrixEventJson
 import org.slf4j.event.Level
 
 interface InboundProxy {
-    suspend fun start(): ApplicationEngine
+  suspend fun start(): ApplicationEngine
 }
 
 class InboundProxyImpl(
-    private val inboundProxyConfiguration: ProxyConfiguration.InboundProxyConfiguration,
-    private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService,
-    private val accessTokenToUserIdAuthenticationFunction: AccessTokenToUserIdAuthenticationFunction,
-    private val inboundClientRoutes: InboundClientRoutes,
-    private val inboundFederationRoutes: InboundFederationRoutes,
-    private val httpClient: HttpClient
+  private val inboundProxyConfiguration: ProxyConfiguration.InboundProxyConfiguration,
+  private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService,
+  private val accessTokenToUserIdAuthenticationFunction: AccessTokenToUserIdAuthenticationFunction,
+  private val inboundClientRoutes: InboundClientRoutes,
+  private val inboundFederationRoutes: InboundFederationRoutes,
+  private val httpClient: HttpClient,
 ) : InboundProxy {
-    override suspend fun start(): ApplicationEngine =
-        embeddedServer(Netty, port = this@InboundProxyImpl.inboundProxyConfiguration.port) {
-            metricsModule()
-            install(CallLogging) {
-                filter { call -> call.response.status() == HttpStatusCode.NotFound }
-                level = Level.WARN
-                format { call ->
-                    val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }
-                    val uri = call.request.uri
-                    val method = call.request.httpMethod.value
+  override suspend fun start(): ApplicationEngine =
+    embeddedServer(Netty, port = this@InboundProxyImpl.inboundProxyConfiguration.port) {
+        metricsModule()
+        install(CallLogging) {
+          filter { call -> call.response.status() == HttpStatusCode.NotFound }
+          level = Level.WARN
+          format { call ->
+            val headerList = call.request.headers.entries().map { "${it.key}: ${it.value}" }
+            val uri = call.request.uri
+            val method = call.request.httpMethod.value
 
-                    "inbound request on unhandled path $uri with method $method and headers $headerList"
-                }
-            }
-
-            val json = createMatrixEventJson()
-            configureMatrixFederationCheckAuth()
-
-
-            customMatrixServer(json) {
-                installPushrulesRoutesForBadRequest()
-
-                route("/_matrix/federation/v1/openid/userinfo") {
-                    handle {
-                        forwardRequest(
-                            call,
-                            httpClient,
-                            call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl),
-                            null
-                        )
-                    }
-                }
-
-                inboundClientRoutes.apply { openClientServerApiRoutes() }
-                authenticate("matrix-access-token-auth") {
-                    inboundClientRoutes.apply { clientServerApiRoutes() }
-                }
-
-                authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
-                    inboundFederationRoutes.apply { serverServerApiRoutes() }
-                    inboundFederationRoutes.apply { serverServerRawDataRoutes() }
-                }
-
-                route("/_matrix/client/v1/login/get_token") {
-                    handle {
-                        throw MatrixServerException(
-                            HttpStatusCode.NotFound,
-                            ErrorResponse.NotFound("No resource was found for this request.")
-                        )
-                    }
-                }
-
-                route("/_matrix/federation/v1/publicRooms") {
-                    handle {
-                        throw MatrixServerException(
-                            HttpStatusCode.Forbidden,
-                            ErrorResponse.Forbidden("A_26520")
-                        )
-                    }
-                }
-
-                route("/_synapse/admin/{...}") {
-                    handle {
-                        forwardRequest(
-                            call,
-                            httpClient,
-                            call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl),
-                            null
-                        )
-                    }
-                }
-
-                route("/actuator/health") {
-                    handle {
-                        call.respond(HttpStatusCode.OK)
-                    }
-                }
-            }
-        }.start()
-
-    private fun Application.configureMatrixFederationCheckAuth() {
-        install(Authentication) {
-            berechtigungsstufeEinsCheck(checkerService = berechtigungsstufeEinsService) {
-                proxyMode = BerechtigungsstufeEinsAuthenticationProvider.ProxyMode.INBOUND
-                enforceDomainList = inboundProxyConfiguration.enforceDomainList
-            }
-            matrixAccessTokenAuth("matrix-access-token-auth") {
-                authenticationFunction = accessTokenToUserIdAuthenticationFunction
-            }
+            "inbound request on unhandled path $uri with method $method and headers $headerList"
+          }
         }
-    }
 
+        val json = createMatrixEventJson()
+        configureMatrixFederationCheckAuth()
+
+        customMatrixServer(json) {
+          installPushrulesRoutesForBadRequest()
+
+          route("/_matrix/federation/v1/openid/userinfo") {
+            handle {
+              forwardRequest(
+                call,
+                httpClient,
+                call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl),
+                null,
+              )
+            }
+          }
+
+          inboundClientRoutes.apply { openClientServerApiRoutes() }
+          authenticate("matrix-access-token-auth") {
+            inboundClientRoutes.apply { clientServerApiRoutes() }
+          }
+
+          authenticate(BerechtigungsstufeEinsAuthenticationProvider.IDENTIFIER) {
+            inboundFederationRoutes.apply { serverServerApiRoutes() }
+            inboundFederationRoutes.apply { serverServerRawDataRoutes() }
+          }
+
+          route("/_matrix/client/v1/login/get_token") {
+            handle {
+              throw MatrixServerException(
+                HttpStatusCode.NotFound,
+                ErrorResponse.NotFound("No resource was found for this request."),
+              )
+            }
+          }
+
+          route("/_matrix/federation/v1/publicRooms") {
+            handle {
+              throw MatrixServerException(
+                HttpStatusCode.Forbidden,
+                ErrorResponse.Forbidden("A_26520, A_28590"),
+              )
+            }
+          }
+
+          route("/_synapse/admin/{...}") {
+            handle {
+              forwardRequest(
+                call,
+                httpClient,
+                call.request.uri.mergeToUrl(inboundProxyConfiguration.homeserverUrl),
+                null,
+              )
+            }
+          }
+
+          route("/actuator/health") { handle { call.respond(HttpStatusCode.OK) } }
+        }
+      }
+      .start()
+
+  private fun Application.configureMatrixFederationCheckAuth() {
+    install(Authentication) {
+      berechtigungsstufeEinsCheck(checkerService = berechtigungsstufeEinsService) {
+        proxyMode = BerechtigungsstufeEinsAuthenticationProvider.ProxyMode.INBOUND
+        enforceDomainList = inboundProxyConfiguration.enforceDomainList
+      }
+      matrixAccessTokenAuth("matrix-access-token-auth") {
+        authenticationFunction = accessTokenToUserIdAuthenticationFunction
+      }
+    }
+  }
 }

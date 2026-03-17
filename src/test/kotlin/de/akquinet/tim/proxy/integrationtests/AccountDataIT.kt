@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,145 +33,155 @@ import kotlin.test.Test
 
 class AccountDataIT {
 
-    @Test
-    fun `should forward account data requests to homeserver without responding with default permissions`() =
-        testApplication {
-            proxyWith(InviteRejectionPolicy.BLOCK_ALL)
-            homeserverWithAccountSetting("clientbackground") {
-                call.respondText("""{ "origin": "homeserver" }""", contentType = Application.Json)
-            }
+  @Test
+  fun `should forward account data requests to homeserver without responding with default permissions`() =
+    testApplication {
+      proxyWith(InviteRejectionPolicy.BLOCK_ALL)
+      homeserverWithAccountSetting("clientbackground") {
+        call.respondText("""{ "origin": "homeserver" }""", contentType = Application.Json)
+      }
 
-            val response =
-                client.get("/_matrix/client/v3/user/@test:synapse/account_data/clientbackground") {
-                    accept(Application.Json)
-                }
-
-            response.bodyAsText() shouldEqualJson """{ "origin": "homeserver" }"""
+      val response =
+        client.get("/_matrix/client/v3/user/@test:synapse/account_data/clientbackground") {
+          accept(Application.Json)
         }
 
-    @Test
-    fun `should forward permissionconfig requests to homeserver`() = testApplication {
-        proxyWith(InviteRejectionPolicy.BLOCK_ALL)
-        homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.v1") {
-            call.respondText("""{ "origin": "homeserver" }""", contentType = Application.Json)
-        }
-
-        val response =
-            client.get("/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.v1") {
-                accept(Application.Json)
-            }
-
-        response.bodyAsText() shouldEqualJson """{ "origin": "homeserver" }"""
+      response.bodyAsText() shouldEqualJson """{ "origin": "homeserver" }"""
     }
 
-    @Test
-    fun `should forward permissionconfig_pro requests to homeserver`() = testApplication {
-        proxyWith(InviteRejectionPolicy.BLOCK_ALL)
-        homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.pro.v1") {
-            call.respondText("""{ "origin": "homeserver" }""", contentType = Application.Json)
-        }
-
-        val response =
-            client.get("/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.pro.v1") {
-                accept(Application.Json)
-            }
-
-        response.bodyAsText() shouldEqualJson """{ "origin": "homeserver" }"""
+  @Test
+  fun `should forward permissionconfig requests to homeserver`() = testApplication {
+    proxyWith(InviteRejectionPolicy.BLOCK_ALL)
+    homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.v1") {
+      call.respondText("""{ "origin": "homeserver" }""", contentType = Application.Json)
     }
 
-    @Test
-    fun `should replace empty permissionconfig with default (allow all)`() = testApplication {
-        proxyWith(InviteRejectionPolicy.ALLOW_ALL)
-        homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.pro.v1") {
-            call.respondText("", status = NotFound)
-        }
+    val response =
+      client.get(
+        "/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.v1"
+      ) {
+        accept(Application.Json)
+      }
 
-        val response =
-            client.get("/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.v1") {
-                accept(Application.Json)
-            }
+    response.bodyAsText() shouldEqualJson """{ "origin": "homeserver" }"""
+  }
 
-        assertSoftly {
-            response shouldHaveStatus OK
-            response.bodyAsText() shouldEqualJson """{ "defaultSetting": "allow all" }"""
-        }
+  @Test
+  fun `should forward permissionconfig_pro requests to homeserver`() = testApplication {
+    proxyWith(InviteRejectionPolicy.BLOCK_ALL)
+    homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.pro.v1") {
+      call.respondText("""{ "origin": "homeserver" }""", contentType = Application.Json)
     }
 
-    @Test
-    fun `should replace empty permissionconfig_pro with default (allow all)`() = testApplication {
-        proxyWith(InviteRejectionPolicy.ALLOW_ALL)
-        homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.pro.v1") {
-            call.respondText("", status = NotFound)
-        }
+    val response =
+      client.get(
+        "/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.pro.v1"
+      ) {
+        accept(Application.Json)
+      }
 
-        val response =
-            client.get("/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.pro.v1") {
-                accept(Application.Json)
-            }
+    response.bodyAsText() shouldEqualJson """{ "origin": "homeserver" }"""
+  }
 
-        assertSoftly {
-            response shouldHaveStatus OK
-            response.bodyAsText() shouldEqualJson """{ "defaultSetting": "allow all" }"""
-        }
+  @Test
+  fun `should replace empty permissionconfig with default (allow all)`() = testApplication {
+    proxyWith(InviteRejectionPolicy.ALLOW_ALL)
+    homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.pro.v1") {
+      call.respondText("", status = NotFound)
     }
 
-    @Test
-    fun `should replace not found permissionconfig with default (block all)`() = testApplication {
-        proxyWith(InviteRejectionPolicy.BLOCK_ALL)
-        homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.pro.v1") {
-            call.respondText("", status = NotFound)
-        }
+    val response =
+      client.get(
+        "/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.v1"
+      ) {
+        accept(Application.Json)
+      }
 
-        val response =
-            client.get("/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.v1") {
-                accept(Application.Json)
-            }
+    assertSoftly {
+      response shouldHaveStatus OK
+      response.bodyAsText() shouldEqualJson """{ "defaultSetting": "allow all" }"""
+    }
+  }
 
-        assertSoftly {
-            response shouldHaveStatus OK
-            response.bodyAsText() shouldEqualJson """{ "defaultSetting": "block all" }"""
-        }
+  @Test
+  fun `should replace empty permissionconfig_pro with default (allow all)`() = testApplication {
+    proxyWith(InviteRejectionPolicy.ALLOW_ALL)
+    homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.pro.v1") {
+      call.respondText("", status = NotFound)
     }
 
-    @Test
-    fun `should replace not found permissionconfig_pro with default (block all)`() = testApplication {
-        proxyWith(InviteRejectionPolicy.BLOCK_ALL)
-        homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.pro.v1") {
-            call.respondText("", status = NotFound)
-        }
+    val response =
+      client.get(
+        "/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.pro.v1"
+      ) {
+        accept(Application.Json)
+      }
 
-        val response =
-            client.get("/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.pro.v1") {
-                accept(Application.Json)
-            }
+    assertSoftly {
+      response shouldHaveStatus OK
+      response.bodyAsText() shouldEqualJson """{ "defaultSetting": "allow all" }"""
+    }
+  }
 
-        assertSoftly {
-            response shouldHaveStatus OK
-            response.bodyAsText() shouldEqualJson """{ "defaultSetting": "block all" }"""
-        }
+  @Test
+  fun `should replace not found permissionconfig with default (block all)`() = testApplication {
+    proxyWith(InviteRejectionPolicy.BLOCK_ALL)
+    homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.pro.v1") {
+      call.respondText("", status = NotFound)
     }
 
-    private fun ApplicationTestBuilder.proxyWith(inviteRejectionPolicy: InviteRejectionPolicy) {
-        proxyWithClientServerRoutes(
-            defaultConfig(
-                httpClient = client,
-                timAuthorizationCheckConfiguration = ProxyConfiguration.TimAuthorizationCheckConfiguration(
-                    concept = TimAuthorizationCheckConcept.CLIENT,
-                    inviteRejectionPolicy = inviteRejectionPolicy
-                )
-            )
-        )
+    val response =
+      client.get(
+        "/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.v1"
+      ) {
+        accept(Application.Json)
+      }
+
+    assertSoftly {
+      response shouldHaveStatus OK
+      response.bodyAsText() shouldEqualJson """{ "defaultSetting": "block all" }"""
+    }
+  }
+
+  @Test
+  fun `should replace not found permissionconfig_pro with default (block all)`() = testApplication {
+    proxyWith(InviteRejectionPolicy.BLOCK_ALL)
+    homeserverWithAccountSetting("de.gematik.tim.account.permissionconfig.pro.v1") {
+      call.respondText("", status = NotFound)
     }
 
-    private fun ApplicationTestBuilder.homeserverWithAccountSetting(
-        eventType: String,
-        configuration: suspend PipelineContext<Unit, ApplicationCall>.() -> Unit
-    ) {
-        homeserverWithRouting {
-            get("/_matrix/client/v3/user/@test:synapse/account_data/$eventType") {
-                configuration()
-            }
-        }
-    }
+    val response =
+      client.get(
+        "/_matrix/client/v3/user/@test:synapse/account_data/de.gematik.tim.account.permissionconfig.pro.v1"
+      ) {
+        accept(Application.Json)
+      }
 
+    assertSoftly {
+      response shouldHaveStatus OK
+      response.bodyAsText() shouldEqualJson """{ "defaultSetting": "block all" }"""
+    }
+  }
+
+  private fun ApplicationTestBuilder.proxyWith(inviteRejectionPolicy: InviteRejectionPolicy) {
+    proxyWithClientServerRoutes(
+      defaultConfig(
+        httpClient = client,
+        timAuthorizationCheckConfiguration =
+          ProxyConfiguration.TimAuthorizationCheckConfiguration(
+            concept = TimAuthorizationCheckConcept.CLIENT,
+            inviteRejectionPolicy = inviteRejectionPolicy,
+          ),
+      )
+    )
+  }
+
+  private fun ApplicationTestBuilder.homeserverWithAccountSetting(
+    eventType: String,
+    configuration: suspend PipelineContext<Unit, ApplicationCall>.() -> Unit,
+  ) {
+    homeserverWithRouting {
+      get("/_matrix/client/v3/user/@test:synapse/account_data/$eventType") { _ -> configuration() }
+    }
+  }
 }

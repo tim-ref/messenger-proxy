@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@ package de.akquinet.tim.proxy.federation
 
 import de.akquinet.tim.proxy.client.model.route.*
 import de.akquinet.tim.proxy.federation.model.route.*
-import de.akquinet.tim.proxy.forwardRequest
 import de.akquinet.tim.proxy.forwardMediaRequest
+import de.akquinet.tim.proxy.forwardRequest
 import io.ktor.client.*
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -34,94 +34,91 @@ import net.folivo.trixnity.serverserverapi.model.discovery.QueryServerKeysByServ
 import net.folivo.trixnity.serverserverapi.model.federation.*
 
 interface FederationRoutes {
-    fun Route.serverServerApiRoutes()
-    fun Route.serverServerRawDataRoutes()
+  fun Route.serverServerApiRoutes()
+
+  fun Route.serverServerRawDataRoutes()
 }
 
-abstract class FederationRoutesImpl(
-    private val httpClient: HttpClient
-) : FederationRoutes {
-    override fun Route.serverServerApiRoutes() {
-        // see A_26224
-        forwardEndpoint<GetServerKeys>()
-        forwardEndpoint<QueryServerKeysByServer>()
-        forwardEndpoint<GetServerVersionRequireAuth>()
-        forwardEndpoint<QueryServerKeys>()
-        forwardEndpoint<CheckPubkeyValidity>()
-        forwardEndpoint<SendTransaction>()
-        forwardEndpoint<GetEventAuthChain>()
-        forwardEndpoint<BackfillRoom>()
-        forwardEndpoint<GetMissingEvents>()
-        forwardEndpoint<GetState>()
-        forwardEndpoint<GetStateIds>()
-        forwardEndpoint<MakeKnock>()
-        forwardEndpoint<SendKnock>()
-        forwardEndpoint<MakeLeave>()
-        forwardEndpoint<SendLeave>()
-        forwardEndpoint<SendLeaveV1>()
-        forwardEndpoint<OnBindThirdPid>()
-        forwardEndpoint<ExchangeThirdPartyInvite>()
-        forwardEndpoint<GetPublicRoomsWithFilter>()
-        forwardEndpoint<GetHierarchy>()
-        forwardEndpoint<QueryDirectory>()
-        forwardEndpoint<QueryProfile>()
-        forwardEndpoint<GetDevices>()
-        forwardEndpoint<ClaimKeys>()
-        forwardEndpoint<GetKeys>()
+abstract class FederationRoutesImpl(private val httpClient: HttpClient) : FederationRoutes {
+  override fun Route.serverServerApiRoutes() {
+    // see A_26224
+    forwardEndpoint<GetServerKeys>()
+    forwardEndpoint<QueryServerKeysByServer>()
+    forwardEndpoint<GetServerVersionRequireAuth>()
+    forwardEndpoint<QueryServerKeys>()
+    forwardEndpoint<CheckPubkeyValidity>()
+    forwardEndpoint<SendTransaction>()
+    forwardEndpoint<GetEventAuthChain>()
+    forwardEndpoint<BackfillRoom>()
+    forwardEndpoint<GetMissingEvents>()
+    forwardEndpoint<GetState>()
+    forwardEndpoint<GetStateIds>()
+    forwardEndpoint<MakeKnock>()
+    forwardEndpoint<SendKnock>()
+    forwardEndpoint<MakeLeave>()
+    forwardEndpoint<SendLeave>()
+    forwardEndpoint<SendLeaveV1>()
+    forwardEndpoint<OnBindThirdPid>()
+    forwardEndpoint<ExchangeThirdPartyInvite>()
+    forwardEndpoint<GetPublicRoomsWithFilter>()
+    forwardEndpoint<GetHierarchy>()
+    forwardEndpoint<QueryDirectory>()
+    forwardEndpoint<QueryProfile>()
+    forwardEndpoint<GetDevices>()
+    forwardEndpoint<ClaimKeys>()
+    forwardEndpoint<GetKeys>()
 
-        // media
-        forwardEndpointWithoutCallReceival<DownloadMedia>()
-        forwardEndpointWithoutCallReceival<DownloadMediaWithFilename>()
-        @Suppress("DEPRECATION")
-        forwardEndpointWithoutCallReceival<DownloadMediaLegacy>()
-        @Suppress("DEPRECATION")
-        forwardEndpointWithoutCallReceival<DownloadMediaWithFilenameLegacy>()
-        forwardEndpointWithoutCallReceival<DownloadMediaR0>()
-        // media V1 --> A_26262
-        forwardEndpointWithoutCallReceival<DownloadMediaV1>()
+    // media
+    forwardEndpointWithoutCallReceival<DownloadMedia>()
+    forwardEndpointWithoutCallReceival<DownloadMediaWithFilename>()
+    @Suppress("DEPRECATION") forwardEndpointWithoutCallReceival<DownloadMediaLegacy>()
+    @Suppress("DEPRECATION") forwardEndpointWithoutCallReceival<DownloadMediaWithFilenameLegacy>()
+    forwardEndpointWithoutCallReceival<DownloadMediaR0>()
+    // media V1 --> A_26262
+    forwardEndpointWithoutCallReceival<DownloadMediaV1>()
 
-//            forwardEndpoint<DownloadThumbnail>()        // Fehlerhaft
-        forwardEndpoint<DownloadThumbnailWithOptionalMethod>()
+    //            forwardEndpoint<DownloadThumbnail>()        // Fehlerhaft
+    forwardEndpoint<DownloadThumbnailWithOptionalMethod>()
 
-        @Suppress("DEPRECATION")
-//            forwardEndpoint<DownloadThumbnailLegacy>()  // Fehlerhaft
-        forwardEndpoint<DownloadThumbnailLegacyWithOptionalMethod>()
+    @Suppress("DEPRECATION")
+    //            forwardEndpoint<DownloadThumbnailLegacy>()  // Fehlerhaft
+    forwardEndpoint<DownloadThumbnailLegacyWithOptionalMethod>()
 
-        forwardEndpoint<DownloadThumbnailR0>()
+    forwardEndpoint<DownloadThumbnailR0>()
 
-        forwardEndpoint<DownloadThumbnailV1>()
+    forwardEndpoint<DownloadThumbnailV1>()
 
+    forwardEndpoint<GetMediaConfig>()
+    // cas
+    forwardEndpoint<CasProxyValidate>()
 
-        forwardEndpoint<GetMediaConfig>()
-        // cas
-        forwardEndpoint<CasProxyValidate>()
+    // see A_26244 resp. TIMREF-2045
+    // Since InboundFederationRoutesImpl and OutboundFederationRoutesImpl
+    // both inherit FederationRoutesImpl, we lose the crucial information
+    // whether the class is of type InboundFederationRoutes or OutboundFederationRoutes.
+    // (Because the common supertype is FederationRoutes.)
+    // This model seems weird to me, and it should be refactored.
 
-        // see A_26244 resp. TIMREF-2045
-        // Since InboundFederationRoutesImpl and OutboundFederationRoutesImpl
-        // both inherit FederationRoutesImpl, we lose the crucial information
-        // whether the class is of type InboundFederationRoutes or OutboundFederationRoutes.
-        // (Because the common supertype is FederationRoutes.)
-        // This model seems weird to me, and it should be refactored.
+    forwardEndpoint<GetServerKeys>()
+    forwardEndpoint<QueryServerKeysByServer>()
 
-        forwardEndpoint<GetServerKeys>()
-        forwardEndpoint<QueryServerKeysByServer>()
+    if (this@FederationRoutesImpl is InboundFederationRoutes) {
+      forwardEndpoint<GetServerKeyById>()
+      forwardEndpoint<QueryServerKeyByServerAndId>()
+    }
+  }
 
-        if (this@FederationRoutesImpl is InboundFederationRoutes) {
-            forwardEndpoint<GetServerKeyById>()
-            forwardEndpoint<QueryServerKeyByServerAndId>()
-        }
+  private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpoint() =
+    matrixEndpointResource<ENDPOINT> {
+      forwardRequest(call, httpClient, call.request.getDestinationUrl(), null)
     }
 
-    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpoint() =
-        matrixEndpointResource<ENDPOINT> {
-            forwardRequest(call, httpClient, call.request.getDestinationUrl(), null)
-        }
-
-    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpointWithoutCallReceival() {
-        matrixEndpointResource<ENDPOINT> {
-            forwardMediaRequest(call, httpClient, call.request.getDestinationUrl())
-        }
+  private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route
+    .forwardEndpointWithoutCallReceival() {
+    matrixEndpointResource<ENDPOINT> {
+      forwardMediaRequest(call, httpClient, call.request.getDestinationUrl())
     }
+  }
 
-    internal abstract fun ApplicationRequest.getDestinationUrl(): Url
+  internal abstract fun ApplicationRequest.getDestinationUrl(): Url
 }

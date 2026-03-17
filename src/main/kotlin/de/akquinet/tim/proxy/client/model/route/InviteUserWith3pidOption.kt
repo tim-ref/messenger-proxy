@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,25 +26,27 @@ import net.folivo.trixnity.core.model.RoomId
 import net.folivo.trixnity.core.model.UserId
 
 /**
- * @see <a href="https://spec.matrix.org/v1.7/client-server-api/#post_matrixclientv3roomsroomidinvite">matrix spec</a>
+ * @see <a
+ *   href="https://spec.matrix.org/v1.7/client-server-api/#post_matrixclientv3roomsroomidinvite">matrix
+ *   spec</a>
  */
 @Serializable
 @Resource("/_matrix/client/v3/rooms/{roomId}/invite")
 @HttpMethod(POST)
 data class InviteUserWith3pidOption(
-    @SerialName("roomId") val roomId: RoomId,
-    @SerialName("user_id") val asUserId: UserId? = null,
+  @SerialName("roomId") val roomId: RoomId,
+  @SerialName("user_id") val asUserId: UserId? = null,
+  @SerialName("address") val address: String? = null,
+  @SerialName("id_access_token") val idAccessToken: String? = null,
+  @SerialName("id_server") val idServer: String? = null,
+  @SerialName("medium") val medium: String? = null,
+) : MatrixEndpoint<InviteUser.Request, Unit> {
+  @Serializable
+  data class Request(
+    @SerialName("user_id") val userId: UserId? = null,
     @SerialName("address") val address: String? = null,
     @SerialName("id_access_token") val idAccessToken: String? = null,
     @SerialName("id_server") val idServer: String? = null,
     @SerialName("medium") val medium: String? = null,
-) : MatrixEndpoint<InviteUser.Request, Unit> {
-    @Serializable
-    data class Request(
-        @SerialName("user_id") val userId: UserId? = null,
-        @SerialName("address") val address: String? = null,
-        @SerialName("id_access_token") val idAccessToken: String? = null,
-        @SerialName("id_server") val idServer: String? = null,
-        @SerialName("medium") val medium: String? = null,
-    )
+  )
 }

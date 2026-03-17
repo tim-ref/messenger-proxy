@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,9 +22,11 @@ import net.folivo.trixnity.core.HttpMethodType.GET
 import net.folivo.trixnity.core.MatrixEndpoint
 
 /**
- * @see <a href="https://github.com/uhoreg/matrix-doc/blob/shrivelled_sessions/proposals/3814-dehydrated-devices-with-ssss.md#rehydrating-a-device">MSC3814 proposal</a>
+ * @see <a
+ *   href="https://github.com/uhoreg/matrix-doc/blob/shrivelled_sessions/proposals/3814-dehydrated-devices-with-ssss.md#rehydrating-a-device">MSC3814
+ *   proposal</a>
  */
 @Serializable
 @Resource("/_matrix/client/unstable/org.matrix.msc3814.v1/dehydrated_device")
 @HttpMethod(GET)
-object GetDehydratedDevice: MatrixEndpoint<Unit, Unit> {}
+object GetDehydratedDevice : MatrixEndpoint<Unit, Unit> {}

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,17 @@
  */
 package de.akquinet.tim.proxy.client.model.route.account_data
 
-/**
- * Matrix event types used by account data
- */
+/** Matrix event types used by account data */
 enum class AccountDataType(val type: String) {
-    /**
-     * [A_26389 - Event Type für Berechtigungskonfiguration](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Pro/gemSpec_TI-M_Pro_V1.0.1/#A_26389)
-     */
-    PRO_PERMISSION_CONFIG("de.gematik.tim.account.permissionconfig.pro.v1"),
+  /**
+   * [A_26389 - Event Type für
+   * Berechtigungskonfiguration](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Pro/gemSpec_TI-M_Pro_V1.0.1/#A_26389)
+   */
+  PRO_PERMISSION_CONFIG("de.gematik.tim.account.permissionconfig.pro.v1"),
 
-    /**
-     * [A_25044 - Namespace für Berechtigungskonfiguration](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.0.0/#A_25044)
-     */
-    PERMISSION_CONFIG("de.gematik.tim.account.permissionconfig.v1"),
+  /**
+   * [A_25044 - Namespace für
+   * Berechtigungskonfiguration](https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Basis/gemSpec_TI-M_Basis_V1.0.0/#A_25044)
+   */
+  PERMISSION_CONFIG("de.gematik.tim.account.permissionconfig.v1"),
 }

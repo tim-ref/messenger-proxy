@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,15 +24,16 @@ import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.core.WithoutAuth
 
 /**
- * @see <a href="https://apereo.github.io/cas/6.6.x/protocol/CAS-Protocol-V2-Specification.html">CAS 2.0 Spec</a>
+ * @see <a href="https://apereo.github.io/cas/6.6.x/protocol/CAS-Protocol-V2-Specification.html">CAS
+ *   2.0 Spec</a>
  */
 @Serializable
 @Resource("/cas/proxyValidate")
 @HttpMethod(HttpMethodType.GET)
 @WithoutAuth
 data class CasProxyValidate(
-    @SerialName("service") val service: String,
-    @SerialName("ticket") val ticket: String,
-    @SerialName("pgtUrl") val pgtUrl: String? = null,
-    @SerialName("renew") val renew: Boolean? = null,
+  @SerialName("service") val service: String,
+  @SerialName("ticket") val ticket: String,
+  @SerialName("pgtUrl") val pgtUrl: String? = null,
+  @SerialName("renew") val renew: Boolean? = null,
 ) : MatrixEndpoint<Unit, Unit>

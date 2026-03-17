@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,30 +27,28 @@ import io.ktor.http.HttpMessageBuilder
 import io.ktor.http.contentType
 
 fun HttpMessageBuilder.matrixAuthorizationHeader() {
-    header(
-        Authorization,
-        """X-Matrix origin="fed",destination="otherHost:80",key="ed25519:ABC",sig="signature""""
-    )
+  header(
+    Authorization,
+    """X-Matrix origin="fed",destination="otherHost:80",key="ed25519:ABC",sig="signature"""",
+  )
 }
 
 suspend fun HttpClient.postKeyClaimAuthenticated() =
-    post("/_matrix/federation/v1/user/keys/claim?test=test") {
-        matrixAuthorizationHeader()
-        contentType(Application.Json)
-        setBody("""{"one_time_keys":{}}""")
-    }
+  post("/_matrix/federation/v1/user/keys/claim?test=test") {
+    matrixAuthorizationHeader()
+    contentType(Application.Json)
+    setBody("""{"one_time_keys":{}}""")
+  }
 
 suspend fun HttpClient.getEventAuthenticated() =
-    get("/_matrix/federation/v1/event/1234") {
-        matrixAuthorizationHeader()
-    }
+  get("/_matrix/federation/v1/event/1234") { matrixAuthorizationHeader() }
 
 suspend fun HttpClient.putInvite(sender: String, invited: String) =
-    put("/_matrix/federation/v2/invite/{roomId}/{eventId}") {
-        matrixAuthorizationHeader()
-        contentType(Application.Json)
-        setBody(
-            """
+  put("/_matrix/federation/v2/invite/{roomId}/{eventId}") {
+    matrixAuthorizationHeader()
+    contentType(Application.Json)
+    setBody(
+      """
                     {
                       "event": {
                         "content": {
@@ -82,9 +80,10 @@ suspend fun HttpClient.putInvite(sender: String, invited: String) =
                       ],
                       "room_version": "2"
                     }
-                """.trimIndent()
-        )
-    }
+                """
+        .trimIndent()
+    )
+  }
 
 suspend fun HttpClient.sendJoin(roomAlias: String) =
   put("/_matrix/federation/v2/send_join/$roomAlias:myServer.com/1234") {

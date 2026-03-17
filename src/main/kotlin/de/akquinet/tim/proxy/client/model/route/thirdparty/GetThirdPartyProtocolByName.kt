@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,13 +23,14 @@ import net.folivo.trixnity.core.HttpMethodType
 import net.folivo.trixnity.core.MatrixEndpoint
 
 /**
- * @see <a href="https://spec.matrix.org/v1.3/client-server-api/#get_matrixclientv3thirdpartyprotocols">matrix spec</a>
+ * @see <a
+ *   href="https://spec.matrix.org/v1.3/client-server-api/#get_matrixclientv3thirdpartyprotocols">matrix
+ *   spec</a>
  */
-
 @Serializable
 @Resource("/_matrix/client/v3/thirdparty/protocol/{protocol}")
 @HttpMethod(HttpMethodType.GET)
-// type of response is any because type "object" of instances->fields is hard to serialize/deserialize
-data class GetThirdPartyProtocolByName(
-    @SerialName("protocol") val protocol: String,
-) : MatrixEndpoint<Unit, Any>
+// type of response is any because type "object" of instances->fields is hard to
+// serialize/deserialize
+data class GetThirdPartyProtocolByName(@SerialName("protocol") val protocol: String) :
+  MatrixEndpoint<Unit, Any>

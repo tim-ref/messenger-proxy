@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,12 +23,14 @@ import net.folivo.trixnity.core.HttpMethodType.GET
 import net.folivo.trixnity.core.MatrixEndpoint
 
 /**
- * @see <a href="https://spec.matrix.org/legacy/client_server/r0.6.1.html#get-matrix-client-r0-events">matrix spec</a>
+ * @see <a
+ *   href="https://spec.matrix.org/legacy/client_server/r0.6.1.html#get-matrix-client-r0-events">matrix
+ *   spec</a>
  */
 @Serializable
 @Resource("/_matrix/client/r0/events")
 @HttpMethod(GET)
 data class EventsR0(
-    @SerialName("from") val from: String? = null,
-    @SerialName("timeout") val timeout: Int? = null,
+  @SerialName("from") val from: String? = null,
+  @SerialName("timeout") val timeout: Int? = null,
 ) : MatrixEndpoint<Unit, Any>

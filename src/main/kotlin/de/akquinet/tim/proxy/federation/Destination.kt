@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,10 +18,10 @@ package de.akquinet.tim.proxy.federation
 import io.ktor.http.*
 
 data class Destination(val host: String, val port: Int) {
-    companion object {
-        // the "dummy://" is needed, because otherwise it is not an Url
-        fun from(string: String) = Url("dummy://$string").run { Destination(host, port) }
-    }
+  companion object {
+    // the "dummy://" is needed, because otherwise it is not an Url
+    fun from(string: String) = Url("dummy://$string").run { Destination(host, port) }
+  }
 
-    override fun toString(): String = "$host:$port"
+  override fun toString(): String = "$host:$port"
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,7 @@ package de.akquinet.tim.proxy.federation
 
 import de.akquinet.tim.proxy.ProxyConfiguration
 import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
-import de.akquinet.tim.proxy.VZDPublicIDCheck
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
-import de.akquinet.tim.proxy.contactmgmt.database.ContactManagementService
-import de.akquinet.tim.proxy.extensions.toUriFormat
 import de.akquinet.tim.proxy.federation.model.route.InviteRequestBodyCommon
 import de.akquinet.tim.proxy.federation.model.route.InviteV1
 import de.akquinet.tim.proxy.federation.model.route.SendJoinV1
@@ -28,7 +25,7 @@ import de.akquinet.tim.proxy.forwardRequest
 import de.akquinet.tim.proxy.mergeToUrl
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.model.Operation
-import de.akquinet.tim.proxy.validation.A26515ValidationService
+import de.akquinet.tim.proxy.validation.SynapseAdminAPIValidator
 import io.ktor.client.HttpClient
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -46,174 +43,130 @@ import net.folivo.trixnity.api.server.matrixEndpointResource
 import net.folivo.trixnity.core.ErrorResponse
 import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.core.MatrixServerException
-import net.folivo.trixnity.core.model.RoomId
-import net.folivo.trixnity.core.model.UserId
 import net.folivo.trixnity.serverserverapi.model.discovery.GetWellKnown
 import net.folivo.trixnity.serverserverapi.model.federation.GetEvent
 import net.folivo.trixnity.serverserverapi.model.federation.Invite
 import net.folivo.trixnity.serverserverapi.model.federation.MakeJoin
 import net.folivo.trixnity.serverserverapi.model.federation.SendJoin
 
-private val logger = KotlinLogging.logger { }
+private val logger = KotlinLogging.logger {}
 
 interface InboundFederationRoutes : FederationRoutes
 
 class InboundFederationRoutesImpl(
-    private val config: ProxyConfiguration.InboundProxyConfiguration,
-    private val httpClient: HttpClient,
-    private val rawDataService: RawDataService,
-    private val contactManagementService: ContactManagementService,
-    private val vzdPublicIDCheck: VZDPublicIDCheck,
-    private val timAuthorizationCheckConfiguration: ProxyConfiguration.TimAuthorizationCheckConfiguration,
-    private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService,
-    private val a26515ValidationService: A26515ValidationService,
+  private val config: ProxyConfiguration.InboundProxyConfiguration,
+  private val httpClient: HttpClient,
+  private val rawDataService: RawDataService,
+  private val timAuthorizationCheckConfiguration:
+    ProxyConfiguration.TimAuthorizationCheckConfiguration,
+  private val berechtigungsstufeEinsService: BerechtigungsstufeEinsService,
+  private val synapseAdminAPIValidator: SynapseAdminAPIValidator,
 ) : InboundFederationRoutes, FederationRoutesImpl(httpClient) {
 
-    private val tolerantJson = Json {
-        ignoreUnknownKeys = true
-    }
+  private val tolerantJson = Json { ignoreUnknownKeys = true }
 
-    override fun ApplicationRequest.getDestinationUrl(): Url = uri.mergeToUrl(config.homeserverUrl)
+  override fun ApplicationRequest.getDestinationUrl(): Url = uri.mergeToUrl(config.homeserverUrl)
 
-    override fun Route.serverServerRawDataRoutes() {
-        forwardWithRawData<GetEvent>(Operation.MP_EXCHANGE_EVENT_OUTSIDE_ORGANISATION_RECEIVER)
-        matrixEndpointResource<GetWellKnown> {
-            call.request.headers[HttpHeaders.Host]?.let { Destination.from(it) }?.host?.let { hostname ->
-                call.respond(HttpStatusCode.OK, GetWellKnown.Response(server = "$hostname:${config.synapsePort}"))
-            } ?: throw MatrixServerException(
-                HttpStatusCode.BadRequest, ErrorResponse.MissingParam("Host header not found in request")
-            )
+  override fun Route.serverServerRawDataRoutes() {
+    forwardWithRawData<GetEvent>(Operation.MP_EXCHANGE_EVENT_OUTSIDE_ORGANISATION_RECEIVER)
+    matrixEndpointResource<GetWellKnown> {
+      call.request.headers[HttpHeaders.Host]
+        ?.let { Destination.from(it) }
+        ?.host
+        ?.let { hostname ->
+          call.respond(
+            HttpStatusCode.OK,
+            GetWellKnown.Response(server = "$hostname:${config.synapsePort}"),
+          )
         }
-        // enforceDomainList is used to turn off the invitation check mechanism ("Berechtigungsprüfung Stufe 3") for Sytest
-        // TODO https://jira.spree.de/browse/TIMREF-1772: a better alternativ to turning off the feature completely would be to start a Nginx Server that mocks
-        // the interface "/vzd/invite" of the registration service
-        if (!config.enforceDomainList) {
-            logger.info("Pass invite permission check, cause sytest is running")
-            forwardWithRawData<Invite>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER)
-            forwardWithRawData<InviteV1>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER)
-        } else {
-            // AFO_25046 enforce invite permission check on client
-            val doBerechtigungscheck = timAuthorizationCheckConfiguration.concept == TimAuthorizationCheckConcept.PROXY
-            matrixEndpointResource<Invite> {
-                handleInvite(call, checkBerechtigungsstufe23 = doBerechtigungscheck)
-            }
-            matrixEndpointResource<InviteV1> {
-                handleInvite(call, checkBerechtigungsstufe23 = doBerechtigungscheck)
-            }
-        }
-
-        /**
-         * Implements checks for joining public rooms
-         *
-         * @see <a
-         *   href="https://gemspec.gematik.de/docs/gemSpec/gemSpec_TI-M_Pro/gemSpec_TI-M_Pro_V1.0.2/#A_26515"
-         *   A_26515 - Öffentliche Räume beitreten</a>
-         */
-        if (!config.enforceDomainList) {
-            logger.info("Pass invite permission check, cause sytest is running")
-            forwardEndpoint<MakeJoin>()
-            forwardEndpoint<SendJoin>()
-            forwardEndpoint<SendJoinV1>()
-        } else {
-            matrixEndpointResource<MakeJoin> {
-                handleJoinRoom(call)
-            }
-            matrixEndpointResource<SendJoin> {
-                handleJoinRoom(call)
-            }
-            // SendJoinV1 is deprecated and this call should be removed in future versions
-            matrixEndpointResource<SendJoinV1> {
-                handleJoinRoom(call)
-            }
-        }
-    }
-
-    private suspend fun handleJoinRoom(call: ApplicationCall) {
-        val roomId = RoomId(call.parameters["roomId"]!!)
-        a26515ValidationService
-            .ensureSameHomeserverForPublicRoomJoin(roomId)
-            .onRight {
-                logger.debug { "Room $roomId can be joined from caller." }
-                forwardRequest(
-                    call = call,
-                    httpClient = httpClient,
-                    destinationUrl = call.request.getDestinationUrl(),
-                    bodyJson = null,
-                )
-            }
-            .onLeft { failure ->
-                logger.error { "Can't join room $roomId cause: ${ failure.message }" }
-                call.respond<ErrorResponse>(
-                    status = failure.httpStatusCode,
-                    message = failure.errorResponse,
-                )
-            }
-    }
-
-    private suspend fun handleInvite(call: ApplicationCall, checkBerechtigungsstufe23: Boolean) {
-        val requestBody = call.receiveText()
-        val request = tolerantJson.decodeFromString<InviteRequestBodyCommon>(requestBody)
-        val (sender, invitedUser, content) = request.event
-        val membership = content.membership
-
-        if (config.enforceDomainList) {
-            checkFederatedDomain(invitedUser.domain)
-            checkFederatedDomain(sender.domain)
-        }
-
-        suspend fun forwardRequest() {
-            forwardRequest(
-                call, httpClient, call.request.getDestinationUrl(), requestBody.toByteArray()
-            ).let {
-                rawDataService.serverRawDataForward(
-                    request = it.first,
-                    response = it.second,
-                    duration = it.third,
-                    timOperation = Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER,
-                    sizeOut = it.fourth
-                )
-            }
-        }
-
-        if (checkBerechtigungsstufe23) {
-            if (membership == "invite" && isInviteAllowed(sender, invitedUser)) {
-                forwardRequest()
-            } else {
-                throw MatrixServerException(
-                    HttpStatusCode.Forbidden,
-                    ErrorResponse.Forbidden("can not invite this user")
-                )
-            }
-        } else {
-            forwardRequest()
-        }
-    }
-
-    private fun checkFederatedDomain(domain: String) {
-        if (berechtigungsstufeEinsService.isUnfederatedDomain(domain)) {
-            throw unfederatedDomainException(domain)
-        }
-    }
-
-    //  Berechtigungsstufe 2 & 3
-    private suspend fun isInviteAllowed(inviter: UserId, invitedUser: UserId): Boolean {
-        if (contactManagementService.getContact(invitedUser.full, inviter.full) != null) {
-            return true
-        }
-        return vzdPublicIDCheck.areMXIDsPublic(
-            invited = invitedUser.toUriFormat().full, inviter = inviter.toUriFormat().full
+        ?: throw MatrixServerException(
+          HttpStatusCode.BadRequest,
+          ErrorResponse.MissingParam("Host header not found in request"),
         )
     }
+    // enforceDomainList is used to turn off the invitation check mechanism ("Berechtigungsprüfung
+    // Stufe 3") for Sytest
+    // TODO https://jira.spree.de/browse/TIMREF-1772: a better alternativ to turning off the feature
+    // completely would be to start a Nginx Server that mocks
+    // the interface "/vzd/invite" of the registration service
+    if (!config.enforceDomainList) {
+      logger.info("Pass invite permission check, cause sytest is running")
+      forwardWithRawData<Invite>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER)
+      forwardWithRawData<InviteV1>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER)
+    } else {
+      val checkInvitePermission =
+        timAuthorizationCheckConfiguration.concept == TimAuthorizationCheckConcept.PROXY
+      matrixEndpointResource<Invite> {
+        handleInvite(call, checkInvitePermission = checkInvitePermission)
+      }
+      matrixEndpointResource<InviteV1> {
+        handleInvite(call, checkInvitePermission = checkInvitePermission)
+      }
+    }
 
-    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpoint() =
-        matrixEndpointResource<ENDPOINT> {
-            forwardRequest(call, httpClient, call.request.getDestinationUrl(), null)
-        }
+    forwardEndpoint<MakeJoin>()
+    forwardEndpoint<SendJoin>()
+    forwardEndpoint<SendJoinV1>()
+  }
 
-    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardWithRawData(timOperation: Operation) =
-        matrixEndpointResource<ENDPOINT> {
-            forwardRequest(call, httpClient, call.request.getDestinationUrl(), null).let {
-                rawDataService.serverRawDataForward(it.first, it.second, it.third, timOperation, it.fourth)
-            }
+  private suspend fun handleInvite(call: ApplicationCall, checkInvitePermission: Boolean) {
+    val requestBody = call.receiveText()
+    val request = tolerantJson.decodeFromString<InviteRequestBodyCommon>(requestBody)
+    val (sender, invitedUser, content) = request.event
+    val membership = content.membership
+
+    suspend fun forwardRequest() {
+      forwardRequest(call, httpClient, call.request.getDestinationUrl(), requestBody.toByteArray())
+        .let {
+          rawDataService.serverRawDataForward(
+            request = it.first,
+            response = it.second,
+            duration = it.third,
+            timOperation = Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_RECEIVER,
+            sizeOut = it.fourth,
+          )
         }
+    }
+
+    if (config.enforceDomainList) {
+      checkFederatedDomain(invitedUser.domain)
+      checkFederatedDomain(sender.domain)
+
+      if (checkInvitePermission) {
+        if (
+          membership == "invite" &&
+            synapseAdminAPIValidator.validateInvitePermission(invitedUser.full, sender).isRight()
+        ) {
+          forwardRequest()
+        } else {
+          throw MatrixServerException(
+            HttpStatusCode.Forbidden,
+            ErrorResponse.Forbidden("Cannot invite this user"),
+          )
+        }
+      } else {
+        forwardRequest()
+      }
+    }
+  }
+
+  private fun checkFederatedDomain(domain: String) {
+    if (berechtigungsstufeEinsService.isUnfederatedDomain(domain)) {
+      throw unfederatedDomainException(domain)
+    }
+  }
+
+  private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpoint() =
+    matrixEndpointResource<ENDPOINT> {
+      forwardRequest(call, httpClient, call.request.getDestinationUrl(), null)
+    }
+
+  private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardWithRawData(
+    timOperation: Operation
+  ) =
+    matrixEndpointResource<ENDPOINT> {
+      forwardRequest(call, httpClient, call.request.getDestinationUrl(), null).let {
+        rawDataService.serverRawDataForward(it.first, it.second, it.third, timOperation, it.fourth)
+      }
+    }
 }

@@ -1,5 +1,5 @@
 #
-# Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+# Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,36 +30,16 @@ services:
       - "1233:1233"
       # TiMessengerInformation
       - "7777:7777"
-      # contact management
-      - "8070:8070"
     volumes:
       - ./certificates/key.pem:/app/certificates/key.pem
       - ./certificates/ca.crt:/app/certificates/ca.crt
     environment:
       CONFIGURATION_FILE_PATH: "/app/resources/application-local-docker.yml"
-    depends_on:
-      db:
-        condition: service_healthy
     networks:
       - default
       - timref-network
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
-  db:
-    container_name: messenger_proxy_db
-    image: postgres:15-alpine
-    ports:
-      - "5433:5432"
-    environment:
-      POSTGRES_DB: messenger-proxy-db
-      POSTGRES_USER: messenger-proxy
-      POSTGRES_PASSWORD: password
-    healthcheck:
-      test: pg_isready -U messenger-proxy -d messenger-proxy-db
-      interval: 3s
-      timeout: 2s
-      retries: 3
 
   synapse:
     container_name: messenger_proxy_synapse

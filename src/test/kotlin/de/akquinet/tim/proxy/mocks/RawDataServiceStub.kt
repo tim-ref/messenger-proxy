@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,14 +22,27 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 
 class RawDataServiceStub : RawDataService {
-    override suspend fun serverRawDataForward(request: ApplicationRequest, response: HttpResponse, duration: Long, timOperation: Operation, sizeOut: Int) {
-    }
+  override suspend fun serverRawDataForward(
+    request: ApplicationRequest,
+    response: HttpResponse,
+    duration: Long,
+    timOperation: Operation,
+    sizeOut: Int,
+  ) {}
 
-    override suspend fun contactRawDataForward(request: ApplicationRequest, statusCode: HttpStatusCode, responseLength: Long, duration: Long, timOperation: Operation) {
-    }
+  override suspend fun contactRawDataForward(
+    request: ApplicationRequest,
+    statusCode: HttpStatusCode,
+    responseLength: Long,
+    duration: Long,
+    timOperation: Operation,
+  ) {}
 
-    override suspend fun clientRawDataForward(requestHeaders: Headers, responseCode: Int, duration: Long, timOperation: Operation, sizeOut: Int) {
-    }
-
-
+  override suspend fun clientRawDataForward(
+    requestHeaders: Headers,
+    responseCode: Int,
+    duration: Long,
+    timOperation: Operation,
+    sizeOut: Int,
+  ) {}
 }

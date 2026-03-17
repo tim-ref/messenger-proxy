@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,12 +20,12 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class LogInfoUserAgentHeader(
-    @SerialName("Produkttypversion") val produkttypversion: String?,
-    @SerialName("Produktversion") val produktversion: String?,
-    @SerialName("Auspraegung") val auspraegung: UserAgent.Auspraegung?,
-    @SerialName("Plattform") val plattform: UserAgent.Plattform?,
-    @SerialName("OS") val operatingSystem: String?,
-    @SerialName("OS-Version") val osVersion: String?,
-    @SerialName("client_id") val clientId: String?,
-    @SerialName("Matrix-Domain") val matrixDomain: String?,
+  @SerialName("Produkttypversion") val produkttypversion: String?,
+  @SerialName("Produktversion") val produktversion: String?,
+  @SerialName("Auspraegung") val auspraegung: UserAgent.Auspraegung?,
+  @SerialName("Plattform") val plattform: UserAgent.Plattform?,
+  @SerialName("OS") val operatingSystem: String?,
+  @SerialName("OS-Version") val osVersion: String?,
+  @SerialName("client_id") val clientId: String?,
+  @SerialName("Matrix-Domain") val matrixDomain: String?,
 )

@@ -1,5 +1,5 @@
 #
-# Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+# Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ registrationServiceConfig:
   servicePort: "8080"
   healthPort: "8081"
   federationListEndpoint: "/backend/federation"
-  invitePermissionCheckEndpoint: "/backend/vzd/invite"
   readinessEndpoint: "/actuator/health/readiness"
   wellKnownSupportEndpoint: "/backend/well-known-support"
 
@@ -53,14 +52,6 @@ actuatorConfig:
 tiMessengerInformationConfiguration:
   port: 7777
 
-contactManagement:
-  port: 8070
-
-database:
-  jdbcUrl: "jdbc:postgresql://db:5432/messenger-proxy-db"
-  dbUser: "messenger-proxy"
-  dbPassword: "password"
-
 logInfoConfig:
   url: "http://host.docker.internal:9020/add-performance-data"
   professionId: ""
@@ -78,7 +69,7 @@ logLevelResetConfig:
 
 # authorization concept for invite events
 timAuthorizationCheckConfiguration:
-  concept: "CLIENT" # [PROXY, CLIENT] | default: CLIENT
+  concept: "PROXY" # [PROXY, CLIENT] | default: CLIENT
   inviteRejectionPolicy: "ALLOW_ALL" # [ALLOW_ALL, BLOCK_ALL] | default: ALLOW_ALL
 
 httpClientConfig:
@@ -94,3 +85,9 @@ synapse:
     baseUrl: ${HOMESERVER_URL:-http://synapse:8083}
     username: ${TIM_SYNAPSE_ADMIN_MXID:-admin}
     password: ${TIM_SYNAPSE_ADMIN_PASSWORD:-admin}
+
+# A_28564-01: Orphaned room cleanup configuration
+orphanedRoomCleanup:
+  enabled: true
+  checkIntervalDays: 1
+  roomAgeThresholdDays: 14

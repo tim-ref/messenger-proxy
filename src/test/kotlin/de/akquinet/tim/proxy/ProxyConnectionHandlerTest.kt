@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,11 +34,6 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.*
-import okio.Path.Companion.toPath
-import okio.fakefilesystem.FakeFileSystem
-import org.bouncycastle.util.io.pem.PemObject
-import org.bouncycastle.util.io.pem.PemWriter
-import org.slf4j.event.Level
 import java.io.File
 import java.io.OutputStreamWriter
 import java.security.SecureRandom
@@ -47,111 +42,125 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 import kotlin.text.toCharArray
+import okio.Path.Companion.toPath
+import okio.fakefilesystem.FakeFileSystem
+import org.bouncycastle.util.io.pem.PemObject
+import org.bouncycastle.util.io.pem.PemWriter
+import org.slf4j.event.Level
 
-class ProxyConnectionHandlerTest : ShouldSpec({
+class ProxyConnectionHandlerTest :
+  ShouldSpec({
     var testPort = 9000
     val externalUrl = "https://localhost:8090"
     val fakeFileSystem = FakeFileSystem()
-    val config = ProxyConfiguration.OutboundProxyConfiguration(true, 8093, "certificates", "certificates/ca.crt", "certificates/key.pem", "", "")
+    val config =
+      ProxyConfiguration.OutboundProxyConfiguration(
+        true,
+        8093,
+        "certificates",
+        "certificates/ca.crt",
+        "certificates/key.pem",
+        "",
+        "",
+      )
 
     lateinit var httpClient: HttpClient
     lateinit var applicationEngine: ApplicationEngine
 
     val keyStoreFile = File("target/keystore.jks")
-    val keyStore = generateCertificate(
+    val keyStore =
+      generateCertificate(
         file = keyStoreFile,
         keyAlias = "ca",
         keyPassword = "password",
         algorithm = "SHA256withECDSA",
         keySizeInBits = 256,
         keyType = KeyType.CA,
-    )
+      )
 
     beforeTest {
-        testPort++
-        fakeFileSystem.createDirectories(config.baseDirectory.toPath())
-        fakeFileSystem.write(config.caCertificateFile.toPath()) {
-            PemWriter(OutputStreamWriter(outputStream()))
-                .apply {
-                    writeObject(PemObject("X509 CERTIFICATE", keyStore.getCertificate("cacert").encoded))
-                    flush()
-                }
+      testPort++
+      fakeFileSystem.createDirectories(config.baseDirectory.toPath())
+      fakeFileSystem.write(config.caCertificateFile.toPath()) {
+        PemWriter(OutputStreamWriter(outputStream())).apply {
+          writeObject(PemObject("X509 CERTIFICATE", keyStore.getCertificate("cacert").encoded))
+          flush()
         }
-        fakeFileSystem.write(config.caPrivateKeyFile.toPath()) {
-            PemWriter(OutputStreamWriter(outputStream()))
-                .apply {
-                    writeObject(PemObject("PRIVATE KEY", keyStore.getKey("ca", "password".toCharArray()).encoded))
-                    flush()
-                }
+      }
+      fakeFileSystem.write(config.caPrivateKeyFile.toPath()) {
+        PemWriter(OutputStreamWriter(outputStream())).apply {
+          writeObject(
+            PemObject("PRIVATE KEY", keyStore.getKey("ca", "password".toCharArray()).encoded)
+          )
+          flush()
         }
-        val outboundProxyCertificateManager = OutboundProxyCertificateManagerImpl(config, fakeFileSystem)
-        val env = applicationEngineEnvironment {
-            connector {
-                port = testPort
+      }
+      val outboundProxyCertificateManager =
+        OutboundProxyCertificateManagerImpl(config, fakeFileSystem)
+      val env = applicationEngineEnvironment {
+        connector { port = testPort }
+        module {
+          install(CallLogging) { level = Level.TRACE }
+          routing {
+            route("{...}") {
+              handle {
+                call.request.uri shouldBe "/hello"
+                call.request.headers[HttpHeaders.Host] shouldBe externalUrl.removePrefix("https://")
+                call.request.httpMethod shouldBe HttpMethod.Post
+                call.request.receiveChannel().toByteArray().decodeToString() shouldBe "world!"
+                call.respond("echo!")
+              }
             }
-            module {
-                install(CallLogging) {
-                    level = Level.TRACE
-                }
-                routing {
-                    route("{...}") {
-                        handle {
-                            call.request.uri shouldBe "/hello"
-                            call.request.headers[HttpHeaders.Host] shouldBe externalUrl.removePrefix("https://")
-                            call.request.httpMethod shouldBe HttpMethod.Post
-                            call.request.receiveChannel().toByteArray().decodeToString() shouldBe "world!"
-                            call.respond("echo!")
-                        }
-                    }
-                }
-            }
+          }
         }
-        applicationEngine = embeddedServer(Netty, env) {
+      }
+      applicationEngine =
+        embeddedServer(Netty, env) {
             channelPipelineConfig = {
-                addBefore("http1", "tunnel", ProxyConnectionHandler(outboundProxyCertificateManager))
+              addBefore("http1", "tunnel", ProxyConnectionHandler(outboundProxyCertificateManager))
             }
-        }.start()
-        httpClient = HttpClient(OkHttp) {
-            install(Logging) {
-                level = LogLevel.ALL
-            }
-            engine {
-                proxy = ProxyBuilder.http("http://0.0.0.0:$testPort/")
-                config {
-                    sslSocketFactory(
-                        SSLContext.getInstance("TLS")
-                        .apply {
-                            init(
-                                KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
-                                    .apply { init(keyStore, "password".toCharArray())
-                                }.keyManagers,
-                                TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
-                                    .apply { init(keyStore) }.trustManagers,
-                                SecureRandom()
-                            )
-                        }.socketFactory,
-                        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
-                            .apply { init(keyStore) }.trustManagers[0] as X509TrustManager
+          }
+          .start()
+      httpClient =
+        HttpClient(OkHttp) {
+          install(Logging) { level = LogLevel.ALL }
+          engine {
+            proxy = ProxyBuilder.http("http://0.0.0.0:$testPort/")
+            config {
+              sslSocketFactory(
+                SSLContext.getInstance("TLS")
+                  .apply {
+                    init(
+                      KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
+                        .apply { init(keyStore, "password".toCharArray()) }
+                        .keyManagers,
+                      TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+                        .apply { init(keyStore) }
+                        .trustManagers,
+                      SecureRandom(),
                     )
-                }
+                  }
+                  .socketFactory,
+                TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+                  .apply { init(keyStore) }
+                  .trustManagers[0]
+                  as X509TrustManager,
+              )
             }
+          }
         }
     }
 
     afterTest {
-        applicationEngine.stop()
-        fakeFileSystem.checkNoOpenFiles()
-        fakeFileSystem.deleteRecursively(config.baseDirectory.toPath())
+      applicationEngine.stop()
+      fakeFileSystem.checkNoOpenFiles()
+      fakeFileSystem.deleteRecursively(config.baseDirectory.toPath())
     }
 
     should("tunnel request") {
-        assertSoftly(
-            httpClient.post("$externalUrl/hello") {
-                setBody("world!")
-            }
-        ) {
-            status shouldBe HttpStatusCode.OK
-            bodyAsText() shouldBe "echo!"
-        }
+      assertSoftly(httpClient.post("$externalUrl/hello") { setBody("world!") }) {
+        status shouldBe HttpStatusCode.OK
+        bodyAsText() shouldBe "echo!"
+      }
     }
-})
+  })

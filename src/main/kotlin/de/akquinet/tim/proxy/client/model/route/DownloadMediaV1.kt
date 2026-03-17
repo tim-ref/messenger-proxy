@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,20 +25,16 @@ import net.folivo.trixnity.core.HttpMethod
 import net.folivo.trixnity.core.HttpMethodType.GET
 import net.folivo.trixnity.core.MatrixEndpoint
 
-/**
- * @see <a href="/_matrix/federation/v1/media/download/{mediaId}">matrix spec</a>
- */
+/** @see <a href="/_matrix/federation/v1/media/download/{mediaId}">matrix spec</a> */
 @Serializable
 @Resource("/_matrix/federation/v1/media/download/{mediaId}")
 @HttpMethod(GET)
 data class DownloadMediaV1(
-    @SerialName("mediaId") val mediaId: String,
-    @SerialName("timeout_ms") val timeoutMs: Long? = null,
+  @SerialName("mediaId") val mediaId: String,
+  @SerialName("timeout_ms") val timeoutMs: Long? = null,
 ) : MatrixEndpoint<Unit, Media> {
 
-    @Transient
-    override val requestContentType = ContentType.Application.Json
+  @Transient override val requestContentType = ContentType.Application.Json
 
-    @Transient
-    override val responseContentType = ContentType.Application.OctetStream
+  @Transient override val responseContentType = ContentType.Application.OctetStream
 }

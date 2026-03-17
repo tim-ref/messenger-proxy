@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,110 +19,94 @@ import de.akquinet.tim.proxy.config.SynapseConnectionConfig
 import kotlin.time.Duration
 
 data class ProxyConfiguration(
-    val federationListCache: FederationListCacheConfiguration,
-    val inboundProxy: InboundProxyConfiguration,
-    val outboundProxy: OutboundProxyConfiguration,
-    val actuatorConfig: ActuatorConfiguration,
-    val contactManagement: ContactManagementConfig,
-    val database: DatabaseConfig,
-    val logInfoConfig: LogInfoConfig,
-    val prometheusClient: PrometheusClient,
-    val registrationServiceConfig: RegistrationServiceConfiguration,
-    val logLevelResetConfig: LogLevelResetConfiguration,
-    val timAuthorizationCheckConfiguration: TimAuthorizationCheckConfiguration,
-    val tiMessengerInformationConfiguration: TiMessengerInformationConfiguration,
-    val httpClientConfig: HttpClientConfig,
-    val synapse: SynapseConnectionConfig,
+  val federationListCache: FederationListCacheConfiguration,
+  val inboundProxy: InboundProxyConfiguration,
+  val outboundProxy: OutboundProxyConfiguration,
+  val actuatorConfig: ActuatorConfiguration,
+  val logInfoConfig: LogInfoConfig,
+  val prometheusClient: PrometheusClient,
+  val registrationServiceConfig: RegistrationServiceConfiguration,
+  val logLevelResetConfig: LogLevelResetConfiguration,
+  val timAuthorizationCheckConfiguration: TimAuthorizationCheckConfiguration,
+  val tiMessengerInformationConfiguration: TiMessengerInformationConfiguration,
+  val httpClientConfig: HttpClientConfig,
+  val synapse: SynapseConnectionConfig,
+  val orphanedRoomCleanup: OrphanedRoomCleanupConfig,
 ) {
-    data class FederationListCacheConfiguration(
-        val baseDirectory: String,
-        val file: String,
-        val metaFile: String,
-        val updateIntervalMinutes: Int
-    )
+  data class FederationListCacheConfiguration(
+    val baseDirectory: String,
+    val file: String,
+    val metaFile: String,
+    val updateIntervalMinutes: Int,
+  )
 
-    data class InboundProxyConfiguration(
-        val enforceDomainList: Boolean,
-        val homeserverUrl: String,
-        val synapseHealthEndpoint: String,
-        val synapsePort: Int,
-        val port: Int,
-        val accessTokenToUserIdCacheDuration: Duration,
-    )
+  data class InboundProxyConfiguration(
+    val enforceDomainList: Boolean,
+    val homeserverUrl: String,
+    val synapseHealthEndpoint: String,
+    val synapsePort: Int,
+    val port: Int,
+    val accessTokenToUserIdCacheDuration: Duration,
+  )
 
-    data class OutboundProxyConfiguration(
-        val enforceDomainList: Boolean,
-        val port: Int,
-        val baseDirectory: String,
-        val caCertificateFile: String,
-        val caPrivateKeyFile: String,
-        val domainWhiteList: String,
-        val ssoDomain: String
-    )
+  data class OutboundProxyConfiguration(
+    val enforceDomainList: Boolean,
+    val port: Int,
+    val baseDirectory: String,
+    val caCertificateFile: String,
+    val caPrivateKeyFile: String,
+    val domainWhiteList: String,
+    val ssoDomain: String,
+  )
 
-    data class ActuatorConfiguration(
-        val port: Int,
-        val basePath: String
-    )
+  data class ActuatorConfiguration(val port: Int, val basePath: String)
 
-    data class ContactManagementConfig(
-        val port: Int
-    )
+  data class LogInfoConfig(
+    val url: String,
+    val professionId: String,
+    val telematikId: String,
+    val instanceId: String,
+    val homeFQDN: String,
+  )
 
-    data class DatabaseConfig(
-        val jdbcUrl: String,
-        val driver: String = "org.postgresql.Driver",
-        val dbUser: String,
-        val dbPassword: String
-    )
+  data class PrometheusClient(val port: Int, val enableDefaultExports: String)
 
-    data class LogInfoConfig(
-        val url: String,
-        val professionId: String,
-        val telematikId: String,
-        val instanceId: String,
-        val homeFQDN: String
-    )
+  data class RegistrationServiceConfiguration(
+    val baseUrl: String,
+    val servicePort: String,
+    val healthPort: String,
+    val federationListEndpoint: String,
+    val readinessEndpoint: String,
+    val wellKnownSupportEndpoint: String,
+  )
 
-    data class PrometheusClient(
-        val port: Int,
-        val enableDefaultExports: String
-    )
+  data class LogLevelResetConfiguration(
+    val logLevelResetDelayInSeconds: Long,
+    val resetLogLevel: String,
+  )
 
-    data class RegistrationServiceConfiguration(
-        val baseUrl: String,
-        val servicePort: String,
-        val healthPort: String,
-        val federationListEndpoint: String,
-        val invitePermissionCheckEndpoint: String,
-        val readinessEndpoint: String,
-        val wellKnownSupportEndpoint: String
-    )
+  data class TimAuthorizationCheckConfiguration(
+    val concept: TimAuthorizationCheckConcept,
+    val inviteRejectionPolicy: InviteRejectionPolicy,
+  )
 
-    data class LogLevelResetConfiguration(
-        val logLevelResetDelayInSeconds: Long,
-        val resetLogLevel: String
-    )
+  data class TiMessengerInformationConfiguration(val port: Int)
 
-    data class TimAuthorizationCheckConfiguration(
-        val concept: TimAuthorizationCheckConcept,
-        val inviteRejectionPolicy: InviteRejectionPolicy
-    )
+  data class HttpClientConfig(val maxRequests: Int = 200, val maxRequestsPerHost: Int = 200)
 
-    data class TiMessengerInformationConfiguration(
-        val port: Int,
-    )
-
-    data class HttpClientConfig(
-        val maxRequests: Int = 200, 
-        val maxRequestsPerHost: Int = 200,
-    )
+  data class OrphanedRoomCleanupConfig(
+    val enabled: Boolean = true,
+    val checkIntervalDays: Int = 1,
+    val roomAgeThresholdDays: Int = 14,
+  )
 }
 
 enum class TimAuthorizationCheckConcept {
-    CLIENT, PROXY
+  CLIENT,
+  PROXY,
 }
 
 enum class InviteRejectionPolicy {
-    ALLOW_ALL, BLOCK_ALL
+  ALLOW_ALL,
+  BLOCK_ALL,
 }

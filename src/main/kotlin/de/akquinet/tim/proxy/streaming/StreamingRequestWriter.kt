@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,20 +29,25 @@ import mu.KotlinLogging
 private val logger = KotlinLogging.logger {}
 
 class StreamingRequestWriter(
-    val call: ApplicationCall,
-    val requestHeaders: Headers = call.request.headers,
+  val call: ApplicationCall,
+  val requestHeaders: Headers = call.request.headers,
 ) : OutgoingContent.WriteChannelContent() {
-    override val headers: Headers = requestHeaders.filterUnsafeHeaders()
-    override val contentLength: Long? = requestHeaders.contentLength ?: run {
+  override val headers: Headers = requestHeaders.filterUnsafeHeaders()
+  override val contentLength: Long? =
+    requestHeaders.contentLength
+      ?: run {
         logger.debug { "Request content-length not set" }
         null
-    }
-    override val contentType: ContentType? = requestHeaders.contentType ?: run {
+      }
+  override val contentType: ContentType? =
+    requestHeaders.contentType
+      ?: run {
         logger.debug { "Request content-type not set" }
         null
-    }
-    override suspend fun writeTo(channel: ByteWriteChannel) {
-        val byteCount = call.request.receiveChannel().copyAndClose(channel)
-        logger.debug { "Forwarded $byteCount byte(s)." }
-    }
+      }
+
+  override suspend fun writeTo(channel: ByteWriteChannel) {
+    val byteCount = call.request.receiveChannel().copyAndClose(channel)
+    logger.debug { "Forwarded $byteCount byte(s)." }
+  }
 }

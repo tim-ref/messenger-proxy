@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,82 +33,73 @@ import kotlin.test.Test
 
 class PresenceIT {
 
-    @Test
-    fun `should return forbidden on putting too long status message`() = testApplication {
-        proxyWithClientServerRoutes(defaultConfig(httpClient = client))
+  @Test
+  fun `should return forbidden on putting too long status message`() = testApplication {
+    proxyWithClientServerRoutes(defaultConfig(httpClient = client))
 
-        val response = client.put("/_matrix/client/v3/presence/@test:synapse/status")
-        {
-            accept(Json)
-            setBody(
-                """{
+    val response =
+      client.put("/_matrix/client/v3/presence/@test:synapse/status") {
+        accept(Json)
+        setBody(
+          """{
                     "presence": "online",
                     "status_msg": "thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage.thisIsALongStatusMessage."
                 }"""
-            )
-        }
+        )
+      }
 
-        response.status shouldBe Forbidden
-        response.bodyAsText() shouldEqualJson
-                """{
+    response.status shouldBe Forbidden
+    response.bodyAsText() shouldEqualJson
+      """{
                     "errcode": "M_TOO_LARGE",
                     "error": "'status_msg' is longer than 250 characters."
                 }"""
+  }
+
+  @Test
+  fun `should forward request on including short status message`() = testApplication {
+    proxyWithClientServerRoutes(defaultConfig(httpClient = client))
+    homeserverWithRouting {
+      put("/_matrix/client/v3/presence/@test:synapse/status") { _ ->
+        call.respondText(contentType = Json, status = OK, text = """{"origin":"homeserver"}""")
+      }
     }
 
-    @Test
-    fun `should forward request on including short status message`() = testApplication {
-        proxyWithClientServerRoutes(defaultConfig(httpClient = client))
-        homeserverWithRouting {
-            put("/_matrix/client/v3/presence/@test:synapse/status") {
-                call.respondText(
-                    contentType = Json,
-                    status = OK,
-                    text = """{"origin":"homeserver"}"""
-                )
-            }
-        }
-
-        val response = client.put("/_matrix/client/v3/presence/@test:synapse/status") {
-            accept(Json)
-            setBody(
-                """{
+    val response =
+      client.put("/_matrix/client/v3/presence/@test:synapse/status") {
+        accept(Json)
+        setBody(
+          """{
                     "presence": "online",
                     "status_msg": "thisIsAShortStatusMessage"
                 }"""
-            )
-        }
+        )
+      }
 
-        response.status shouldBe OK
-        response.bodyAsText() shouldEqualJson
-                """{ "origin": "homeserver" }"""
+    response.status shouldBe OK
+    response.bodyAsText() shouldEqualJson """{ "origin": "homeserver" }"""
+  }
+
+  @Test
+  fun `should forward request on not including status message`() = testApplication {
+    proxyWithClientServerRoutes(defaultConfig(httpClient = client))
+    homeserverWithRouting {
+      put("/_matrix/client/v3/presence/@test:synapse/status") { _ ->
+        call.respondText(contentType = Json, status = OK, text = """{"origin":"homeserver"}""")
+      }
     }
 
-    @Test
-    fun `should forward request on not including status message`() = testApplication {
-        proxyWithClientServerRoutes(defaultConfig(httpClient = client))
-        homeserverWithRouting {
-            put("/_matrix/client/v3/presence/@test:synapse/status") {
-                call.respondText(
-                    contentType = Json,
-                    status = OK,
-                    text = """{"origin":"homeserver"}"""
-                )
-            }
-        }
-
-        val response = client.put("/_matrix/client/v3/presence/@test:synapse/status") {
-            accept(Json)
-            setBody(
-                """{
+    val response =
+      client.put("/_matrix/client/v3/presence/@test:synapse/status") {
+        accept(Json)
+        setBody(
+          """{
                     "presence": "online"
                 }"""
-            )
-        }
+        )
+      }
 
-        response.status shouldBe OK
-        response.bodyAsText() shouldEqualJson
-                """{ "origin":"homeserver" }"""
-    }
-
+    response.status shouldBe OK
+    response.bodyAsText() shouldEqualJson """{ "origin":"homeserver" }"""
+  }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,17 +25,14 @@ import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.core.model.RoomId
 
 /**
- * @see <a href="https://spec.matrix.org/v1.10/client-server-api/#get_matrixclientv3directorylistroomroomid">matrix spec</a>
- * Endpoint should be authorized A_26518
+ * @see <a
+ *   href="https://spec.matrix.org/v1.10/client-server-api/#get_matrixclientv3directorylistroomroomid">matrix
+ *   spec</a> Endpoint should be authorized A_26518
  */
 @Serializable
 @Resource("/_matrix/client/v3/directory/list/room/{roomId}")
 @HttpMethod(GET)
-data class GetDirectoryVisibility(
-    @SerialName("roomId") val roomId: RoomId,
-) : MatrixEndpoint<Unit, GetDirectoryVisibility.Response> {
-    @Serializable
-    data class Response(
-        @SerialName("visibility") val visibility: DirectoryVisibility
-    )
+data class GetDirectoryVisibility(@SerialName("roomId") val roomId: RoomId) :
+  MatrixEndpoint<Unit, GetDirectoryVisibility.Response> {
+  @Serializable data class Response(@SerialName("visibility") val visibility: DirectoryVisibility)
 }

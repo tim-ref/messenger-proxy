@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,43 +27,41 @@ import net.folivo.trixnity.clientserverapi.model.server.GetVersions
 
 object GetVersionsTransformer : BodyTransformer {
 
-    private val maxMatrixVersion = MatrixVersion("v1.11")
+  private val maxMatrixVersion = MatrixVersion("v1.11")
 
-    override val path: String
-        get() = "/_matrix/client/versions"
+  override val path: String
+    get() = "/_matrix/client/versions"
 
-    override val applicableStates: Set<HttpStatusCode>
-        get() = setOf(HttpStatusCode.OK)
+  override val applicableStates: Set<HttpStatusCode>
+    get() = setOf(HttpStatusCode.OK)
 
-    override suspend fun transform(body: Any): Any {
-        val errorMessage =
-            "Unexpected body type ${body.javaClass}: Please use bodyAsChannel() or bodyAsText() only."
-        val bytes = when (body) {
-            is ByteReadChannel -> body.toByteArray()
-            is ByteReadPacket -> body.readBytes()
-            else -> throw InvalidBodyException(errorMessage)
-        }
-        val originalVersions = Json.decodeFromString<GetVersions.Response>(bytes.decodeToString())
-        val filteredVersions = originalVersions.versions
-            .map { MatrixVersion(it) }
-            .filter { it <= maxMatrixVersion }
-            .map { it.version }
+  override suspend fun transform(body: Any): Any {
+    val errorMessage =
+      "Unexpected body type ${body.javaClass}: Please use bodyAsChannel() or bodyAsText() only."
+    val bytes =
+      when (body) {
+        is ByteReadChannel -> body.toByteArray()
+        is ByteReadPacket -> body.readBytes()
+        else -> throw InvalidBodyException(errorMessage)
+      }
+    val originalVersions = Json.decodeFromString<GetVersions.Response>(bytes.decodeToString())
+    val filteredVersions =
+      originalVersions.versions
+        .map { MatrixVersion(it) }
+        .filter { it <= maxMatrixVersion }
+        .map { it.version }
 
-        val json = Json {
-            encodeDefaults = true
-        }
+    val json = Json { encodeDefaults = true }
 
-        val newBody = json.encodeToString(
-            GetVersions.Response(
-                versions = filteredVersions.sorted(),
-                unstableFeatures = mapOf()
-            )
-        )
+    val newBody =
+      json.encodeToString(
+        GetVersions.Response(versions = filteredVersions.sorted(), unstableFeatures = mapOf())
+      )
 
-        return when (body) {
-            is ByteReadChannel -> ByteReadChannel(newBody)
-            is ByteReadPacket -> ByteReadPacket(newBody.toByteArray())
-            else -> throw InvalidBodyException(errorMessage)
-        }
+    return when (body) {
+      is ByteReadChannel -> ByteReadChannel(newBody)
+      is ByteReadPacket -> ByteReadPacket(newBody.toByteArray())
+      else -> throw InvalidBodyException(errorMessage)
     }
+  }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,97 +52,103 @@ import net.folivo.trixnity.core.MatrixServerException
 
 // this code is copied from Trixnity and slightly adapted to our needs to conform with Sytest
 fun Application.customMatrixServer(json: Json, routes: Route.() -> Unit) {
-    installCustomMatrixApiServer(json)
-    routing {
-        routes()
-    }
+  installCustomMatrixApiServer(json)
+  routing { routes() }
 }
 
 fun Application.installCustomMatrixApiServer(json: Json) {
-    install(Resources)
-    install(StatusPages) {
-        exception(json)
-        notFound(json)
-        methodNotAllowed(json)
-        unsupportedMediaType(json)
-    }
-    install(ContentNegotiation) {
-        json(json)
-    }
+  install(Resources)
+  install(StatusPages) {
+    exception(json)
+    notFound(json)
+    methodNotAllowed(json)
+    unsupportedMediaType(json)
+  }
+  install(ContentNegotiation) { json(json) }
 }
 
 private fun StatusPagesConfig.exception(json: Json) {
-    exception { call: ApplicationCall, cause: Throwable ->
-        call.application.log.error(cause)
-        when (cause) {
-            is MatrixServerException ->
-                call.respond(
-                    cause.statusCode,
-                    json.encodeToJsonElement(ErrorResponseSerializer, cause.errorResponse)
-                )
+  exception { call: ApplicationCall, cause: Throwable ->
+    call.application.log.error(cause)
+    when (cause) {
+      is MatrixServerException ->
+        call.respond(
+          cause.statusCode,
+          json.encodeToJsonElement(ErrorResponseSerializer, cause.errorResponse),
+        )
 
-            is SerializationException ->
-                call.respond(
-                    HttpStatusCode.BadRequest,
-                    json.encodeToJsonElement(ErrorResponseSerializer, ErrorResponse.BadJson(cause.message.orEmpty()))
-                )
+      is SerializationException ->
+        call.respond(
+          HttpStatusCode.BadRequest,
+          json.encodeToJsonElement(
+            ErrorResponseSerializer,
+            ErrorResponse.BadJson(cause.message.orEmpty()),
+          ),
+        )
 
-            // catching this exception is crucial for Sytest, this is a change in comparison to trixnity
-            is BadRequestException ->
-                call.respond(
-                    HttpStatusCode.BadRequest,
-                    json.encodeToJsonElement(ErrorResponseSerializer, ErrorResponse.Unknown(cause.message.orEmpty()))
-                )
+      // catching this exception is crucial for Sytest, this is a change in comparison to trixnity
+      is BadRequestException ->
+        call.respond(
+          HttpStatusCode.BadRequest,
+          json.encodeToJsonElement(
+            ErrorResponseSerializer,
+            ErrorResponse.Unknown(cause.message.orEmpty()),
+          ),
+        )
 
-            else -> {
-                call.respond(
-                    HttpStatusCode.InternalServerError,
-                    json.encodeToJsonElement(ErrorResponseSerializer, ErrorResponse.Unknown(cause.message.orEmpty()))
-                )
-            }
-        }
+      else -> {
+        call.respond(
+          HttpStatusCode.InternalServerError,
+          json.encodeToJsonElement(
+            ErrorResponseSerializer,
+            ErrorResponse.Unknown(cause.message.orEmpty()),
+          ),
+        )
+      }
     }
+  }
 }
 
 private fun StatusPagesConfig.notFound(json: Json) {
-    status(HttpStatusCode.NotFound) { call, _ ->
-        call.respond(
-            HttpStatusCode.NotFound,
-            json.encodeToJsonElement(
-                ErrorResponseSerializer,
-                // in comparison to the trixnity code response code was changed from Unrecognized to NotFound to adapt to Sytest
-                ErrorResponse.NotFound("unsupported (or unknown) endpoint")
-            )
-        )
-    }
+  status(HttpStatusCode.NotFound) { call, _ ->
+    call.respond(
+      HttpStatusCode.NotFound,
+      json.encodeToJsonElement(
+        ErrorResponseSerializer,
+        // in comparison to the trixnity code response code was changed from Unrecognized to
+        // NotFound to adapt to Sytest
+        ErrorResponse.NotFound("unsupported (or unknown) endpoint"),
+      ),
+    )
+  }
 }
 
 /**
- * Similarly, a 405 M_UNRECOGNIZED error is used to denote an unsupported
- * method to a known endpoint.
+ * Similarly, a 405 M_UNRECOGNIZED error is used to denote an unsupported method to a known
+ * endpoint.
  *
  * See https://spec.matrix.org/v1.11/server-server-api/#unsupported-endpoints
  */
 private fun StatusPagesConfig.methodNotAllowed(json: Json) {
-    status(HttpStatusCode.MethodNotAllowed) { call, _ ->
-        call.respond(
-            HttpStatusCode.MethodNotAllowed,
-            json.encodeToJsonElement(
-                ErrorResponseSerializer,
-                ErrorResponse.Unrecognized("This endpoint is implemented, but the method is not supported.")
-            )
-        )
-    }
+  status(HttpStatusCode.MethodNotAllowed) { call, _ ->
+    call.respond(
+      HttpStatusCode.MethodNotAllowed,
+      json.encodeToJsonElement(
+        ErrorResponseSerializer,
+        ErrorResponse.Unrecognized("This endpoint is implemented, but the method is not supported."),
+      ),
+    )
+  }
 }
 
 private fun StatusPagesConfig.unsupportedMediaType(json: Json) {
-    status(HttpStatusCode.UnsupportedMediaType) { call, _ ->
-        call.respond(
-            HttpStatusCode.UnsupportedMediaType,
-            json.encodeToJsonElement(
-                ErrorResponseSerializer,
-                ErrorResponse.Unrecognized("media type of request is not supported")
-            )
-        )
-    }
+  status(HttpStatusCode.UnsupportedMediaType) { call, _ ->
+    call.respond(
+      HttpStatusCode.UnsupportedMediaType,
+      json.encodeToJsonElement(
+        ErrorResponseSerializer,
+        ErrorResponse.Unrecognized("media type of request is not supported"),
+      ),
+    )
+  }
 }

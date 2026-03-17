@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,10 +19,10 @@ import io.ktor.http.HttpStatusCode
 import net.folivo.trixnity.core.ErrorResponse
 
 fun HttpStatusCode.toErrorResponse(message: String): ErrorResponse =
-    when (this) {
-        HttpStatusCode.Forbidden -> ErrorResponse.Forbidden(error = message)
-        HttpStatusCode.NotFound -> ErrorResponse.NotFound(error = message)
-        HttpStatusCode.Unauthorized -> ErrorResponse.Unauthorized(error = message)
-        HttpStatusCode.BadRequest -> ErrorResponse.BadJson(error = message)
-        else -> ErrorResponse.Unknown(error = message)
-    }
+  when (this) {
+    HttpStatusCode.Forbidden -> ErrorResponse.Forbidden(error = message)
+    HttpStatusCode.NotFound -> ErrorResponse.NotFound(error = message)
+    HttpStatusCode.Unauthorized -> ErrorResponse.Unauthorized(error = message)
+    HttpStatusCode.BadRequest -> ErrorResponse.BadJson(error = message)
+    else -> ErrorResponse.Unknown(error = message)
+  }

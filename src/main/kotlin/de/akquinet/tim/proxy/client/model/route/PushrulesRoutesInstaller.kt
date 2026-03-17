@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,30 +21,30 @@ import net.folivo.trixnity.core.ErrorResponse
 import net.folivo.trixnity.core.MatrixServerException
 
 fun Route.installPushrulesRoutesForBadRequest() {
-    route("/_matrix/client/v3/pushrules") {
-        get("/{scope}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
-        }
-        get("/{scope}/{kind}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
-        }
-        get("/{scope}/{kind}/{ruleId}/{attribute}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam(""))
-        }
-        put("/") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
-        }
-        put("/{scope}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
-        }
-        put("/{scope}/{kind}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
-        }
-        put("/{scope}/{kind}/") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam(""))
-        }
-        put("/{scope}/{kind}/{ruleId}/{attribute}") {
-            throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam(""))
-        }
+  route("/_matrix/client/v3/pushrules") {
+    get("/{scope}") {
+      throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
     }
+    get("/{scope}/{kind}") {
+      throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
+    }
+    get("/{scope}/{kind}/{ruleId}/{attribute}") {
+      throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam(""))
+    }
+    put("/") {
+      throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
+    }
+    put("/{scope}") {
+      throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
+    }
+    put("/{scope}/{kind}") {
+      throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.MissingParam(""))
+    }
+    put("/{scope}/{kind}/") {
+      throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam(""))
+    }
+    put("/{scope}/{kind}/{ruleId}/{attribute}") {
+      throw MatrixServerException(HttpStatusCode.BadRequest, ErrorResponse.InvalidParam(""))
+    }
+  }
 }

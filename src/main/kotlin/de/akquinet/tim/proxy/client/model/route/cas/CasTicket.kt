@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,14 +24,16 @@ import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.core.WithoutAuth
 
 /**
- * @see <a href="https://spec.matrix.org/legacy/client_server/r0.3.0.html#get-matrix-client-r0-login-cas-ticket">matrix spec</a>
+ * @see <a
+ *   href="https://spec.matrix.org/legacy/client_server/r0.3.0.html#get-matrix-client-r0-login-cas-ticket">matrix
+ *   spec</a>
  */
 @Serializable
 @Resource("/_matrix/client/r0/login/cas/ticket")
 @HttpMethod(HttpMethodType.GET)
 @WithoutAuth
 data class CasTicket(
-    @SerialName("redirectUrl") val redirectUrl: String? = null,
-    @SerialName("session") val session: String? = null,
-    @SerialName("ticket") val ticket: String,
+  @SerialName("redirectUrl") val redirectUrl: String? = null,
+  @SerialName("session") val session: String? = null,
+  @SerialName("ticket") val ticket: String,
 ) : MatrixEndpoint<Unit, Unit>

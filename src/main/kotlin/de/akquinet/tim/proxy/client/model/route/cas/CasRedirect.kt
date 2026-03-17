@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,15 +25,16 @@ import net.folivo.trixnity.core.MatrixEndpoint
 import net.folivo.trixnity.core.WithoutAuth
 
 /**
- * @see <a href="https://spec.matrix.org/v1.3/client-server-api/#get_matrixclientv3loginssoredirect">matrix spec</a>
+ * @see <a
+ *   href="https://spec.matrix.org/v1.3/client-server-api/#get_matrixclientv3loginssoredirect">matrix
+ *   spec</a>
  */
 @Serializable
 @Resource("/_matrix/client/v3/login/cas/redirect")
 @HttpMethod(HttpMethodType.GET)
 @WithoutAuth
-data class CasRedirect(
-    @SerialName("redirectUrl") val redirectUrl: String,
-) : MatrixEndpoint<Unit, Unit> {
-    override val responseContentType: ContentType?
-        get() = null
+data class CasRedirect(@SerialName("redirectUrl") val redirectUrl: String) :
+  MatrixEndpoint<Unit, Unit> {
+  override val responseContentType: ContentType?
+    get() = null
 }

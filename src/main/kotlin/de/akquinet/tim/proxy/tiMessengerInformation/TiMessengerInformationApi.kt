@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import arrow.core.raise.either
 import arrow.core.raise.ensureNotNull
 import de.akquinet.tim.proxy.ProxyConfiguration
 import de.akquinet.tim.proxy.authorization.MatrixAuthorizationService
-import de.akquinet.tim.proxy.federation.FederationListCache
 import de.akquinet.tim.proxy.util.metricsModule
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -32,91 +31,77 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
 class TiMessengerInformationApi(
-    val configuration: ProxyConfiguration.TiMessengerInformationConfiguration,
-    private val federationListCache: FederationListCache,
-    private val matrixAuthorizationService: MatrixAuthorizationService,
+  val configuration: ProxyConfiguration.TiMessengerInformationConfiguration,
+  private val tiMessengerInformationService: TIMessengerInformationService,
+  private val matrixAuthorizationService: MatrixAuthorizationService,
 ) {
-    private val basePath = "/tim-information"
+  private val basePath = "/tim-information"
 
-    fun start(): ApplicationEngine =
-        embeddedServer(Netty, port = configuration.port) {
-            metricsModule()
-            routing {
-                tiMessengerInformationRoutes()
-            }
-        }.start()
+  fun start(): ApplicationEngine =
+    embeddedServer(Netty, port = configuration.port) {
+        metricsModule()
+        routing { tiMessengerInformationRoutes() }
+      }
+      .start()
 
-    fun Route.tiMessengerInformationRoutes() {
-        route(basePath) {
-            get("/") {
-                tiMessengerInformation(call.request).handle(call)
-            }
+  fun Route.tiMessengerInformationRoutes() {
+    route(basePath) {
+      get("/") { tiMessengerInformation(call.request).handle(call) }
 
-            get("/v1/server/findByIk") {
-                getServerNameByIkNumber(call.request).handle(call)
-            }
+      get("/v1/server/findByIk") { getServerNameByIkNumber(call.request).handle(call) }
 
-            get("/v1/server/isInsurance") {
-                getIsInsuranceByServerName(call.request).handle(call)
-            }
-        }
+      get("/v1/server/isInsurance") { getIsInsuranceByServerName(call.request).handle(call) }
+    }
+  }
+
+  private suspend fun Either<TiMessengerInformationError, TiMessengerInformationResult>.handle(
+    call: ApplicationCall
+  ) {
+    val status = fold(ifLeft = { error -> error.statusCode() }, ifRight = { HttpStatusCode.OK })
+    val result = mapLeft { error -> error.toErrorResult() }.merge()
+    call.respondText(result.encodeToString(), ContentType.Application.Json, status)
+  }
+
+  private suspend fun authorize(
+    headers: Headers
+  ): Either<TiMessengerInformationError.Unauthorized, Unit> =
+    matrixAuthorizationService.authorizeWithoutMxid(headers).mapLeft { matrixAuthorizationError ->
+      TiMessengerInformationError.Unauthorized(matrixAuthorizationError)
     }
 
-    private suspend fun Either<TiMessengerInformationError, TiMessengerInformationResult>.handle(call: ApplicationCall) {
-        val status = fold(ifLeft = { error -> error.statusCode() }, ifRight = { HttpStatusCode.OK })
-        val result = mapLeft { error -> error.toErrorResult() }.merge()
-        call.respondText(result.encodeToString(), ContentType.Application.Json, status)
+  private suspend fun tiMessengerInformation(
+    request: ApplicationRequest
+  ): Either<TiMessengerInformationError, TiMessengerInformation> = either {
+    authorize(request.headers).bind()
+
+    TiMessengerInformation(title = "Contact Information API des TI-Messengers", version = "1.0.0")
+  }
+
+  private suspend fun getServerNameByIkNumber(
+    request: ApplicationRequest
+  ): Either<TiMessengerInformationError, ServerNameResult> = either {
+    authorize(request.headers).bind()
+
+    val ikNumber = request.queryParameters["ikNumber"]
+
+    ensureNotNull(ikNumber) {
+      TiMessengerInformationError.MissingParameter("missing query parameter 'ikNumber'")
     }
 
-    private suspend fun authorize(headers: Headers): Either<TiMessengerInformationError.Unauthorized, Unit> =
-        matrixAuthorizationService.authorizeWithoutMxid(headers)
-            .mapLeft { matrixAuthorizationError -> TiMessengerInformationError.Unauthorized(matrixAuthorizationError) }
+    tiMessengerInformationService.getServerNameByIkNumber(ikNumber).bind()
+  }
 
-    private suspend fun tiMessengerInformation(request: ApplicationRequest): Either<TiMessengerInformationError, TiMessengerInformation> =
-        either {
-            authorize(request.headers).bind()
+  private suspend fun getIsInsuranceByServerName(
+    request: ApplicationRequest
+  ): Either<TiMessengerInformationError, IsInsuranceResult> = either {
+    authorize(request.headers).bind()
 
-            TiMessengerInformation(
-                title = "Contact Information API des TI-Messengers",
-                version = "1.0.0",
-            )
-        }
+    val serverName = request.queryParameters["serverName"]
 
-    private suspend fun getServerNameByIkNumber(request: ApplicationRequest): Either<TiMessengerInformationError, ServerNameResult> =
-        either {
-            authorize(request.headers).bind()
+    ensureNotNull(serverName) {
+      TiMessengerInformationError.MissingParameter("missing query parameter 'serverName'")
+    }
 
-            val ikNumber = request.queryParameters["ikNumber"]
-
-            ensureNotNull(ikNumber) {
-                TiMessengerInformationError.MissingParameter("missing query parameter 'ikNumber'")
-            }
-
-            val domain = federationListCache.domains.value.firstOrNull { it.ik?.contains(ikNumber) ?: false }
-
-            ensureNotNull(domain) {
-                TiMessengerInformationError.NoMatch("no domain associated with ikNumber=$ikNumber")
-            }
-
-            ServerNameResult(domain.domain)
-        }
-
-    private suspend fun getIsInsuranceByServerName(request: ApplicationRequest): Either<TiMessengerInformationError, IsInsuranceResult> =
-        either {
-            authorize(request.headers).bind()
-
-            val serverName = request.queryParameters["serverName"]
-
-            ensureNotNull(serverName) {
-                TiMessengerInformationError.MissingParameter("missing query parameter 'serverName'")
-            }
-
-            val domain = federationListCache.domains.value.firstOrNull { it.domain == serverName }
-
-            ensureNotNull(domain) {
-                TiMessengerInformationError.NoMatch("no domain associated with serverName=$serverName")
-            }
-
-            IsInsuranceResult(domain.isInsurance)
-        }
+    tiMessengerInformationService.getIsInsuranceByServerName(serverName).bind()
+  }
 }

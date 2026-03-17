@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,225 +15,232 @@
  */
 package de.akquinet.tim.proxy.integrationtests
 
-import de.akquinet.tim.proxy.*
+import de.akquinet.tim.proxy.InboundProxyImpl
+import de.akquinet.tim.proxy.InviteRejectionPolicy
+import de.akquinet.tim.proxy.OutboundProxyCertificateManagerImpl
+import de.akquinet.tim.proxy.OutboundProxyImpl
+import de.akquinet.tim.proxy.ProxyConfiguration
+import de.akquinet.tim.proxy.TimAuthorizationCheckConcept
 import de.akquinet.tim.proxy.actuator.ActuatorRoutesImpl
 import de.akquinet.tim.proxy.bs.BerechtigungsstufeEinsService
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdAuthenticationFunctionImpl
 import de.akquinet.tim.proxy.client.AccessTokenToUserIdImpl
 import de.akquinet.tim.proxy.client.InboundClientRoutesImpl
+import de.akquinet.tim.proxy.enforcer.RequestPolicyEnforcer
 import de.akquinet.tim.proxy.federation.FederationList
 import de.akquinet.tim.proxy.federation.InboundFederationRoutesImpl
 import de.akquinet.tim.proxy.federation.OutboundFederationRoutesImpl
 import de.akquinet.tim.proxy.logging.LogLevelService
-import de.akquinet.tim.proxy.mocks.ContactManagementStub
 import de.akquinet.tim.proxy.mocks.FederationListCacheMock
 import de.akquinet.tim.proxy.mocks.RawDataServiceStub
-import de.akquinet.tim.proxy.mocks.VZDPublicIDCheckMock
-import de.akquinet.tim.proxy.validation.SendMessageValidationService
+import de.akquinet.tim.proxy.validation.RequestContentValidator
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.engine.okhttp.*
-import io.ktor.client.plugins.logging.*
-import io.ktor.client.request.*
-import io.ktor.http.*
-import io.ktor.server.engine.*
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.logging.LogLevel
+import io.ktor.client.plugins.logging.Logging
+import io.ktor.client.request.get
+import io.ktor.client.request.put
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.engine.ApplicationEngine
 import io.mockk.mockk
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import net.folivo.trixnity.api.client.MatrixApiClient
 import okio.FileSystem
-import org.jetbrains.exposed.sql.Database
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.slf4j.event.Level
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.time.Duration.Companion.hours
 
 class ActuatorRoutesIT {
 
-    private lateinit var federationListCacheMock: FederationListCacheMock
+  private lateinit var federationListCacheMock: FederationListCacheMock
 
-    private lateinit var rawDataServiceStub: RawDataServiceStub
-    private val contactManagementServiceMock = ContactManagementStub()
-    private val vzdPublicIDCheckMock = VZDPublicIDCheckMock()
+  private lateinit var rawDataServiceStub: RawDataServiceStub
 
-    private val virtualHostname = ""
-    private val externalMatrixHostname = ""
-    private val matrixHttpsPort = 8090
-    private val proxyInboundHostPort = 8090
-    private val proxyOutboundHostPort = 8558
-    private val healthBaseUrl = "http://localhost:1233/actuator/health/"
-    private val loggingBaseUrl = "http://localhost:1233/actuator/logging"
-    private val httpClient = HttpClient(OkHttp) {
-        install(Logging) {
-            level = LogLevel.ALL
-        }
-    }
-    private val rawDataServiceUrl = "https://localhost:1234"
-    private val rawDataPath = "/add-performance-data"
+  private val virtualHostname = ""
+  private val externalMatrixHostname = ""
+  private val matrixHttpsPort = 8090
+  private val proxyInboundHostPort = 8090
+  private val proxyOutboundHostPort = 8558
+  private val healthBaseUrl = "http://localhost:1233/actuator/health/"
+  private val loggingBaseUrl = "http://localhost:1233/actuator/logging"
+  private val httpClient = HttpClient(OkHttp) { install(Logging) { level = LogLevel.ALL } }
+  private val rawDataServiceUrl = "https://localhost:1234"
+  private val rawDataPath = "/add-performance-data"
 
-    private val regServerConfig = ProxyConfiguration.RegistrationServiceConfiguration(
-        baseUrl = "http://localhost",
-        servicePort = "8070",
-        healthPort = "8071",
-        readinessEndpoint = "/actuator/health/readiness",
-        federationListEndpoint = "",
-        invitePermissionCheckEndpoint = "",
-        wellKnownSupportEndpoint = "/backend/well-known-support"
+  private val regServerConfig =
+    ProxyConfiguration.RegistrationServiceConfiguration(
+      baseUrl = "http://localhost",
+      servicePort = "8070",
+      healthPort = "8071",
+      readinessEndpoint = "/actuator/health/readiness",
+      federationListEndpoint = "",
+      wellKnownSupportEndpoint = "/backend/well-known-support",
     )
 
-    private val logLevelResetConfiguration = ProxyConfiguration.LogLevelResetConfiguration(
-        logLevelResetDelayInSeconds = 5,
-        resetLogLevel = Level.INFO.name
+  private val logLevelResetConfiguration =
+    ProxyConfiguration.LogLevelResetConfiguration(
+      logLevelResetDelayInSeconds = 5,
+      resetLogLevel = Level.INFO.name,
     )
 
-    private lateinit var bsEinsService: BerechtigungsstufeEinsService
-    private lateinit var outboundApplicationEngine: ApplicationEngine
-    private lateinit var inboundApplicationEngine: ApplicationEngine
-    private lateinit var healthCheckApplicationEngine: ApplicationEngine
+  private lateinit var bsEinsService: BerechtigungsstufeEinsService
+  private lateinit var outboundApplicationEngine: ApplicationEngine
+  private lateinit var inboundApplicationEngine: ApplicationEngine
+  private lateinit var healthCheckApplicationEngine: ApplicationEngine
 
-    private var inboundProxyConfig = ProxyConfiguration.InboundProxyConfiguration(
-        homeserverUrl = "http://localhost",
-        port = proxyInboundHostPort,
-        synapseHealthEndpoint = "/health",
-        synapsePort = 443,
+  private var inboundProxyConfig =
+    ProxyConfiguration.InboundProxyConfiguration(
+      homeserverUrl = "http://localhost",
+      port = proxyInboundHostPort,
+      synapseHealthEndpoint = "/health",
+      synapsePort = 443,
+      enforceDomainList = true,
+      accessTokenToUserIdCacheDuration = 1.hours,
+    )
+
+  private val embeddedPostgres: EmbeddedPostgres = EmbeddedPostgres.start()
+
+  @BeforeTest
+  fun beforeEach(): Unit = runBlocking {
+    val outboundProxyConfig =
+      ProxyConfiguration.OutboundProxyConfiguration(
+        port = proxyOutboundHostPort,
+        baseDirectory = "certificates",
+        caCertificateFile = "ca.crt",
+        caPrivateKeyFile = "ca.key",
         enforceDomainList = true,
-        accessTokenToUserIdCacheDuration = 1.hours
-    )
+        domainWhiteList = "",
+        ssoDomain = "",
+      )
+    val logInfoConfig =
+      ProxyConfiguration.LogInfoConfig(
+        "$rawDataServiceUrl$rawDataPath",
+        "doctor",
+        "2384234234",
+        "MP-1",
+        "home.de",
+      )
+    val actuatorConfiguration =
+      ProxyConfiguration.ActuatorConfiguration(port = 1233, basePath = "/actuator")
+    val timAuthorizationCheckConfiguration =
+      ProxyConfiguration.TimAuthorizationCheckConfiguration(
+        concept = TimAuthorizationCheckConcept.CLIENT,
+        inviteRejectionPolicy = InviteRejectionPolicy.ALLOW_ALL,
+      )
 
-    private val embeddedPostgres: EmbeddedPostgres = EmbeddedPostgres.start()
-
-    @BeforeTest
-    fun beforeEach(): Unit = runBlocking {
-        val outboundProxyConfig = ProxyConfiguration.OutboundProxyConfiguration(
-            port = proxyOutboundHostPort,
-            baseDirectory = "certificates",
-            caCertificateFile = "ca.crt",
-            caPrivateKeyFile = "ca.key",
-            enforceDomainList = true,
-            domainWhiteList = "",
-            ssoDomain = ""
+    federationListCacheMock = FederationListCacheMock()
+    bsEinsService = BerechtigungsstufeEinsService(federationListCacheMock)
+    rawDataServiceStub = RawDataServiceStub()
+    // always trust server itself
+    federationListCacheMock.domains.update {
+      it +
+        FederationList.FederationDomain(
+          domain = "$virtualHostname:$matrixHttpsPort$externalMatrixHostname:$matrixHttpsPort",
+          isInsurance = true,
+          telematikID = "telematik",
         )
-        val logInfoConfig = ProxyConfiguration.LogInfoConfig(
-            "$rawDataServiceUrl$rawDataPath",
-            "doctor",
-            "2384234234",
-            "MP-1",
-            "home.de"
+    }
+
+    val outboundProxyCertificateManager =
+      OutboundProxyCertificateManagerImpl(outboundProxyConfig, FileSystem.RESOURCES)
+    outboundApplicationEngine =
+      OutboundProxyImpl(
+          outboundProxyConfig,
+          bsEinsService,
+          OutboundFederationRoutesImpl(httpClient, rawDataServiceStub),
+          outboundProxyCertificateManager,
+          httpClient,
         )
-        val actuatorConfiguration = ProxyConfiguration.ActuatorConfiguration(
-            port = 1233,
-            basePath = "/actuator"
+        .start()
+    inboundApplicationEngine =
+      InboundProxyImpl(
+          inboundProxyConfiguration = inboundProxyConfig,
+          accessTokenToUserIdAuthenticationFunction =
+            AccessTokenToUserIdAuthenticationFunctionImpl(
+              AccessTokenToUserIdImpl(inboundProxyConfig, MatrixApiClient())
+            ),
+          inboundClientRoutes =
+            InboundClientRoutesImpl(
+              config = inboundProxyConfig,
+              logConfiguration = logInfoConfig,
+              timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
+              httpClient = httpClient,
+              berechtigungsstufeEinsService = bsEinsService,
+              rawDataService = rawDataServiceStub,
+              regServiceConfig = regServerConfig,
+              requestContentValidator = RequestContentValidator(),
+              synapseAdminAPIValidator = mockk(relaxed = true),
+              requestPolicyEnforcer = RequestPolicyEnforcer(),
+            ),
+          inboundFederationRoutes =
+            InboundFederationRoutesImpl(
+              config = inboundProxyConfig,
+              httpClient = httpClient,
+              rawDataService = rawDataServiceStub,
+              timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
+              berechtigungsstufeEinsService = bsEinsService,
+              synapseAdminAPIValidator = mockk(),
+            ),
+          httpClient = httpClient,
+          berechtigungsstufeEinsService = bsEinsService,
         )
-        val timAuthorizationCheckConfiguration = ProxyConfiguration.TimAuthorizationCheckConfiguration(
-            concept = TimAuthorizationCheckConcept.CLIENT,
-            inviteRejectionPolicy = InviteRejectionPolicy.ALLOW_ALL
+        .start()
+
+    healthCheckApplicationEngine =
+      ActuatorRoutesImpl(
+          actuatorConfig = actuatorConfiguration,
+          inboundProxyConfig = inboundProxyConfig,
+          outboundProxyConfig = outboundProxyConfig,
+          logLevelService = LogLevelService(logLevelResetConfiguration),
+          httpClient = httpClient,
         )
+        .start()
+  }
 
-        Database.connect({ embeddedPostgres.postgresDatabase.connection })
+  @AfterTest
+  fun afterEach() {
+    inboundApplicationEngine.stop()
+    outboundApplicationEngine.stop()
+    healthCheckApplicationEngine.stop()
+    httpClient.close()
+    embeddedPostgres.close()
+  }
 
-        federationListCacheMock = FederationListCacheMock()
-        bsEinsService = BerechtigungsstufeEinsService(federationListCacheMock)
-        rawDataServiceStub = RawDataServiceStub()
-        // always trust server itself
-        federationListCacheMock.domains.update {
-            it +
-                    FederationList.FederationDomain(
-                        domain = "$virtualHostname:$matrixHttpsPort$externalMatrixHostname:$matrixHttpsPort",
-                        isInsurance = true,
-                        telematikID = "telematik"
-                    )
-        }
+  @ParameterizedTest
+  @ValueSource(strings = ["liveness", "readiness"])
+  fun shouldReturnHealthCheckOk(endpoint: String) = runTest {
+    httpClient.get(healthBaseUrl + endpoint).status shouldBe HttpStatusCode.OK
+  }
 
-        val outboundProxyCertificateManager =
-            OutboundProxyCertificateManagerImpl(outboundProxyConfig, FileSystem.RESOURCES)
-        outboundApplicationEngine =
-            OutboundProxyImpl(
-                outboundProxyConfig,
-                bsEinsService,
-                OutboundFederationRoutesImpl(httpClient, rawDataServiceStub),
-                outboundProxyCertificateManager, httpClient
-            ).start()
-        inboundApplicationEngine =
-            InboundProxyImpl(
-                inboundProxyConfiguration = inboundProxyConfig,
-                accessTokenToUserIdAuthenticationFunction = AccessTokenToUserIdAuthenticationFunctionImpl(
-                    AccessTokenToUserIdImpl(inboundProxyConfig, MatrixApiClient())
-                ),
-                inboundClientRoutes = InboundClientRoutesImpl(
-                    config = inboundProxyConfig,
-                    logConfiguration = logInfoConfig,
-                    timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
-                    httpClient = httpClient,
-                    berechtigungsstufeEinsService = bsEinsService,
-                    rawDataService = rawDataServiceStub,
-                    regServiceConfig = regServerConfig,
-                    sendMessageValidationService = SendMessageValidationService(),
-                ),
-                inboundFederationRoutes = InboundFederationRoutesImpl(
-                    config = inboundProxyConfig,
-                    httpClient = httpClient,
-                    rawDataService = rawDataServiceStub,
-                    contactManagementService = contactManagementServiceMock,
-                    vzdPublicIDCheck = vzdPublicIDCheckMock,
-                    timAuthorizationCheckConfiguration = timAuthorizationCheckConfiguration,
-                    berechtigungsstufeEinsService = bsEinsService,
-                    a26515ValidationService = mockk(relaxed = true),
-                ),
-                httpClient = httpClient,
-                berechtigungsstufeEinsService = bsEinsService
-            ).start()
+  @OptIn(ExperimentalStdlibApi::class)
+  @Test
+  fun canGetSupportedLogLevels() = runTest {
+    val response = httpClient.get("$loggingBaseUrl/levels")
+    response.status shouldBe HttpStatusCode.OK
+    Level.entries.forEach { response.body<String>() shouldContain it.name }
+  }
 
-        healthCheckApplicationEngine =
-            ActuatorRoutesImpl(
-                actuatorConfig = actuatorConfiguration,
-                inboundProxyConfig = inboundProxyConfig,
-                outboundProxyConfig = outboundProxyConfig,
-                logLevelService = LogLevelService(logLevelResetConfiguration),
-                httpClient = httpClient
-            ).start()
-    }
+  @ParameterizedTest
+  @ValueSource(strings = ["OFF", "TRACE", "DEBUG", "INFO", "WARN", "ERROR"])
+  fun canChangeRootLogLevel(newLogLevel: String) = runTest {
+    val response = httpClient.put("$loggingBaseUrl/$newLogLevel")
+    response.status shouldBe HttpStatusCode.Accepted
+  }
 
-    @AfterTest
-    fun afterEach() {
-        inboundApplicationEngine.stop()
-        outboundApplicationEngine.stop()
-        healthCheckApplicationEngine.stop()
-        httpClient.close()
-        embeddedPostgres.close()
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = ["liveness", "readiness"])
-    fun shouldReturnHealthCheckOk(endpoint: String) = runTest {
-        httpClient.get(healthBaseUrl + endpoint).status shouldBe HttpStatusCode.OK
-    }
-
-    @OptIn(ExperimentalStdlibApi::class)
-    @Test
-    fun canGetSupportedLogLevels() = runTest {
-        val response = httpClient.get("$loggingBaseUrl/levels")
-        response.status shouldBe HttpStatusCode.OK
-        Level.entries.forEach { response.body<String>() shouldContain it.name }
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = ["OFF", "TRACE", "DEBUG", "INFO", "WARN", "ERROR"])
-    fun canChangeRootLogLevel(newLogLevel: String) = runTest {
-        val response = httpClient.put("$loggingBaseUrl/$newLogLevel")
-        response.status shouldBe HttpStatusCode.Accepted
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = ["OFF", "TRACE", "DEBUG", "INFO", "WARN", "ERROR"])
-    fun canChangeSpecificLogLevel(newLogLevel: String) = runTest {
-        val response = httpClient.put("$loggingBaseUrl/$newLogLevel/some.logger.identifier")
-        response.status shouldBe HttpStatusCode.Accepted
-    }
+  @ParameterizedTest
+  @ValueSource(strings = ["OFF", "TRACE", "DEBUG", "INFO", "WARN", "ERROR"])
+  fun canChangeSpecificLogLevel(newLogLevel: String) = runTest {
+    val response = httpClient.put("$loggingBaseUrl/$newLogLevel/some.logger.identifier")
+    response.status shouldBe HttpStatusCode.Accepted
+  }
 }

@@ -76,7 +76,6 @@ sub _init {
         messenger_proxy_outbound   => main::alloc_port("messenger_proxy[$idx].outbound"),
         messenger_proxy_health     => main::alloc_port("messenger_proxy[$idx].health"),
         messenger_proxy_prometheus => main::alloc_port("messenger_proxy[$idx].prometheus"),
-        messenger_proxy_contactManagement => main::alloc_port("messenger_proxy[$idx].contactManagement"),
         messenger_proxy_timInformation => main::alloc_port("messenger_proxy[$idx].tiMessengerInformationConfiguration"),
     };
 }
@@ -472,19 +471,11 @@ server {
             instanceId   => "",
             homeFQDN     => "home.de"
         },
-        "contactManagement" => {
-            port         => $self->{ports}{messenger_proxy_contactManagement}
-        },
         "tiMessengerInformationConfiguration" => {
             port         => $self->{ports}{messenger_proxy_timInformation}
         },
         "invitePermissionConfig" => {
             regApiUrl    => "http://localhost:8080/backend/vzd/invite"
-        },
-        "database" => {
-             jdbcUrl         => "jdbc:postgresql://$bind_host:5432/pg$hs_index",
-             dbUser          => "postgres",
-             dbPassword      => ""
         },
         actuatorConfig => {
           port => $self->{ports}{messenger_proxy_health},
@@ -495,7 +486,7 @@ server {
           resetLogLevel => "INFO"
         },
         timAuthorizationCheckConfiguration => {
-          concept => "CLIENT",
+          concept => "PROXY",
           inviteRejectionPolicy => "ALLOW_ALL"
         },
         httpClientConfig => {
@@ -509,6 +500,11 @@ server {
                 username     => "admin",
                 password     => "admin",
             },
+        },
+        orphanedRoomCleanup => {
+            enabled => JSON::true,
+            checkIntervalDays => 1,
+            roomAgeThresholdDays => 14,
         },
     });
 
@@ -566,7 +562,7 @@ server {
         return $self->_start_synapse(env => $env);
     })->then(sub {
         $output->diag(
-            "Starting messenger-proxy server $hs_index on health port " . $self->{ports}{messenger_proxy_health} . " outbound port " . $self->{ports}{messenger_proxy_outbound} . " inbound port " . $self->{ports}{messenger_proxy_inbound} . " contact management port " . $self->{ports}{messenger_proxy_contactManagement} . " tim information port " . $self->{ports}{messenger_proxy_timInformation}
+            "Starting messenger-proxy server $hs_index on health port " . $self->{ports}{messenger_proxy_health} . " outbound port " . $self->{ports}{messenger_proxy_outbound} . " inbound port " . $self->{ports}{messenger_proxy_inbound} . " tim information port " . $self->{ports}{messenger_proxy_timInformation}
         );
 
         return $self->_start_messenger_proxy(log => $messenger_proxy_log, env => $messenger_proxy_env);

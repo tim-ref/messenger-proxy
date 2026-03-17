@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,37 +20,31 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 interface TiMessengerInformationResult {
-    fun encodeToString(): String
+  fun encodeToString(): String
 }
 
 @Serializable
 data class TiMessengerInformation(
-    val title: String,
-    val version: String,
-    val description: String? = null,
-    val contact: String? = null,
+  val title: String,
+  val version: String,
+  val description: String? = null,
+  val contact: String? = null,
 ) : TiMessengerInformationResult {
-    override fun encodeToString(): String = Json.encodeToString(this)
+  override fun encodeToString(): String = Json.encodeToString(this)
 }
 
 @Serializable
-data class ServerNameResult(
-    val serverName: String
-) : TiMessengerInformationResult {
-    override fun encodeToString(): String = Json.encodeToString(this)
+data class ServerNameResult(val serverName: String) : TiMessengerInformationResult {
+  override fun encodeToString(): String = Json.encodeToString(this)
 }
 
 @Serializable
-data class IsInsuranceResult(
-    val isInsurance: Boolean
-) : TiMessengerInformationResult {
-    override fun encodeToString(): String = Json.encodeToString(this)
+data class IsInsuranceResult(val isInsurance: Boolean) : TiMessengerInformationResult {
+  override fun encodeToString(): String = Json.encodeToString(this)
 }
 
 @Serializable
-data class ErrorResult(
-    val errorCode: String,
-    val errorMessage: String,
-) : TiMessengerInformationResult {
-    override fun encodeToString(): String = Json.encodeToString(this)
+data class ErrorResult(val errorCode: String, val errorMessage: String) :
+  TiMessengerInformationResult {
+  override fun encodeToString(): String = Json.encodeToString(this)
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,11 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpStatusCode
+import java.util.Timer
+import kotlin.concurrent.schedule
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -31,29 +36,31 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
-import java.util.Timer
-import kotlin.concurrent.schedule
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
 
 class FileCacheIT {
-    private val regServerConfig = ProxyConfiguration.RegistrationServiceConfiguration(
-        baseUrl = "http://localhost",
-        servicePort = "8070",
-        healthPort = "8071",
-        readinessEndpoint = "/actuator/health/readiness",
-        federationListEndpoint = "/backend/federation",
-        invitePermissionCheckEndpoint = "/backend/vzd/invite",
-        wellKnownSupportEndpoint = "/backend/well-known-support"
+  private val regServerConfig =
+    ProxyConfiguration.RegistrationServiceConfiguration(
+      baseUrl = "http://localhost",
+      servicePort = "8070",
+      healthPort = "8071",
+      readinessEndpoint = "/actuator/health/readiness",
+      federationListEndpoint = "/backend/federation",
+      wellKnownSupportEndpoint = "/backend/well-known-support",
     )
-    private val baseDirectory = "federationList"
-    private val filePath  = "federationList/federationList.json"
-    private val metaFilePath = "federationList/federationList-meta.json"
-    private val updateIntervalMinutes=1
-    private val fakeFileSystem = FakeFileSystem()
-    private val federationListConfig = ProxyConfiguration.FederationListCacheConfiguration(baseDirectory, filePath, metaFilePath,updateIntervalMinutes)
-    private val responseString = """{
+  private val baseDirectory = "federationList"
+  private val filePath = "federationList/federationList.json"
+  private val metaFilePath = "federationList/federationList-meta.json"
+  private val updateIntervalMinutes = 1
+  private val fakeFileSystem = FakeFileSystem()
+  private val federationListConfig =
+    ProxyConfiguration.FederationListCacheConfiguration(
+      baseDirectory,
+      filePath,
+      metaFilePath,
+      updateIntervalMinutes,
+    )
+  private val responseString =
+    """{
                                       "version": 0,
                                       "domainList": [
                                         {
@@ -69,50 +76,47 @@ class FileCacheIT {
                                       ]
                                     }"""
 
-    private val httpClient = HttpClient(MockEngine) {
-        engine {
-            addHandler { request ->
-                if (request.url.encodedPath == "/backend/federation") {
-                    respond(responseString, HttpStatusCode.OK)
-                } else {
-                    error("Unhandled ${request.url.encodedPath}")
-                }
-            }
+  private val httpClient =
+    HttpClient(MockEngine) {
+      engine {
+        addHandler { request ->
+          if (request.url.encodedPath == "/backend/federation") {
+            respond(responseString, HttpStatusCode.OK)
+          } else {
+            error("Unhandled ${request.url.encodedPath}")
+          }
         }
+      }
     }
 
-    private lateinit var federationListCacheDeferred: Deferred<Unit>
+  private lateinit var federationListCacheDeferred: Deferred<Unit>
 
-    @BeforeTest
-    fun beforeEach(): Unit = runBlocking {
-        federationListCacheDeferred = async { startFileCache() }
+  @BeforeTest
+  fun beforeEach(): Unit = runBlocking {
+    federationListCacheDeferred = async { startFileCache() }
 
-        // cancel task after reasonable duration
-        Timer().schedule(3000) {
-            federationListCacheDeferred.cancel()
-        }
+    // cancel task after reasonable duration
+    Timer().schedule(3000) { federationListCacheDeferred.cancel() }
+  }
+
+  private suspend fun startFileCache() {
+    FederationListCacheImpl(federationListConfig, regServerConfig, httpClient, fakeFileSystem)
+      .start()
+  }
+
+  @AfterTest
+  fun afterEach() {
+    fakeFileSystem.checkNoOpenFiles()
+    fakeFileSystem.deleteRecursively(baseDirectory.toPath())
+    httpClient.close()
+  }
+
+  @Test
+  fun shouldReadFederationListFromFile() = runTest {
+    fakeFileSystem.read(filePath.toPath()) { readUtf8() shouldBe responseString }
+
+    fakeFileSystem.read(metaFilePath.toPath()) {
+      Json.decodeFromString<FileCacheMeta>(readUtf8()).shouldBeTypeOf<FileCacheMeta>()
     }
-    private suspend fun startFileCache() {
-            FederationListCacheImpl(
-                federationListConfig, regServerConfig, httpClient, fakeFileSystem
-            ).start()
-    }
-
-    @AfterTest
-    fun afterEach() {
-        fakeFileSystem.checkNoOpenFiles()
-        fakeFileSystem.deleteRecursively(baseDirectory.toPath())
-        httpClient.close()
-    }
-
-    @Test
-    fun shouldReadFederationListFromFile() = runTest {
-        fakeFileSystem.read(filePath.toPath()) {
-            readUtf8() shouldBe responseString
-        }
-
-        fakeFileSystem.read(metaFilePath.toPath()) {
-            Json.decodeFromString<FileCacheMeta>(readUtf8()).shouldBeTypeOf<FileCacheMeta>()
-        }
-    }
+  }
 }

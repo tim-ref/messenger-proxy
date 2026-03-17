@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,15 +18,15 @@ package de.akquinet.tim.proxy.extensions
 import net.folivo.trixnity.core.model.UserId
 
 fun UserId.toUriFormat(): UserId =
-    if (this.full.contains(UserId.sigilCharacter)) {
-        UserId("matrix:u/${this.localpart}:${this.domain}")
-    } else {
-        this
-    }
+  if (this.full.contains(UserId.sigilCharacter)) {
+    UserId("matrix:u/${this.localpart}:${this.domain}")
+  } else {
+    this
+  }
 
 fun UserId.toAtFormat(): UserId =
-    if (this.full.contains(UserId.sigilCharacter)) {
-        this
-    } else {
-        UserId(this.full.replace("matrix:u/", UserId.sigilCharacter.toString()))
-    }
+  if (this.full.contains(UserId.sigilCharacter)) {
+    this
+  } else {
+    UserId(this.full.replace("matrix:u/", UserId.sigilCharacter.toString()))
+  }

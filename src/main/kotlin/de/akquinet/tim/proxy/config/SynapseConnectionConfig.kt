@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,4 @@
 package de.akquinet.tim.proxy.config
 
 // Copied from TIMP proxy, where a separate database config exists
-data class SynapseConnectionConfig(
-    val adminApi: SynapseClientConfig,
-)
+data class SynapseConnectionConfig(val adminApi: SynapseClientConfig)

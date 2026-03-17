@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,38 +41,43 @@ import net.folivo.trixnity.serverserverapi.model.federation.SendJoin
 interface OutboundFederationRoutes : FederationRoutes
 
 class OutboundFederationRoutesImpl(
-    private val httpClient: HttpClient,
-    private val rawDataService: RawDataService
+  private val httpClient: HttpClient,
+  private val rawDataService: RawDataService,
 ) : OutboundFederationRoutes, FederationRoutesImpl(httpClient) {
-    override fun ApplicationRequest.getDestinationUrl(): Url = URLBuilder().apply {
+  override fun ApplicationRequest.getDestinationUrl(): Url =
+    URLBuilder()
+      .apply {
         takeFrom(uri)
-        val destination = headers[HttpHeaders.Host]?.let { Destination.from(it) }
+        val destination =
+          headers[HttpHeaders.Host]?.let { Destination.from(it) }
             ?: throw IllegalArgumentException("host header was not set")
         protocol = URLProtocol.HTTPS
         host = destination.host
         port = destination.port
-    }.build()
+      }
+      .build()
 
-    override fun Route.serverServerRawDataRoutes() {
-        forwardWithRawData<Invite>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER)
-        forwardWithRawData<InviteV1>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER)
-        forwardWithRawData<GetEvent>(Operation.MP_EXCHANGE_EVENT_OUTSIDE_ORGANISATION_SENDER)
-        forwardEndpoint<GetWellKnown>()
-        forwardEndpoint<SendJoin>()
-        forwardEndpoint<SendJoinV1>()
-        forwardEndpoint<MakeJoin>()
+  override fun Route.serverServerRawDataRoutes() {
+    forwardWithRawData<Invite>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER)
+    forwardWithRawData<InviteV1>(Operation.MP_INVITE_OUTSIDE_ORGANISATION_INVITE_SENDER)
+    forwardWithRawData<GetEvent>(Operation.MP_EXCHANGE_EVENT_OUTSIDE_ORGANISATION_SENDER)
+    forwardEndpoint<GetWellKnown>()
+    forwardEndpoint<SendJoin>()
+    forwardEndpoint<SendJoinV1>()
+    forwardEndpoint<MakeJoin>()
+  }
+
+  private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardWithRawData(
+    timOperation: Operation
+  ) =
+    matrixEndpointResource<ENDPOINT> {
+      forwardRequest(call, httpClient, call.request.getDestinationUrl(), null).let {
+        rawDataService.serverRawDataForward(it.first, it.second, it.third, timOperation, it.fourth)
+      }
     }
 
-    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardWithRawData(timOperation: Operation) =
-        matrixEndpointResource<ENDPOINT> {
-            forwardRequest(call, httpClient, call.request.getDestinationUrl(), null).let {
-                    rawDataService.serverRawDataForward(it.first, it.second, it.third, timOperation, it.fourth)
-            }
-        }
-
-    private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpoint() =
-        matrixEndpointResource<ENDPOINT> {
-            forwardRequest(call, httpClient, call.request.getDestinationUrl(), null)
-        }
-
+  private inline fun <reified ENDPOINT : MatrixEndpoint<*, *>> Route.forwardEndpoint() =
+    matrixEndpointResource<ENDPOINT> {
+      forwardRequest(call, httpClient, call.request.getDestinationUrl(), null)
+    }
 }

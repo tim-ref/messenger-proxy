@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023 - 2025 akquinet GmbH (https://www.akquinet.de)
+ * Copyright © 2023 - 2026 akquinet GmbH (https://www.akquinet.de)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,11 +25,11 @@ import net.folivo.trixnity.core.model.UserId
 import net.folivo.trixnity.core.model.push.PushRuleSet
 
 /**
- * @see <a href="https://spec.matrix.org/v1.3/client-server-api/#get_matrixclientv3pushrules">matrix spec</a>
+ * @see <a href="https://spec.matrix.org/v1.3/client-server-api/#get_matrixclientv3pushrules">matrix
+ *   spec</a>
  */
 @Serializable
 @Resource("/_matrix/client/v3/pushrules/{scope}/")
 @HttpMethod(GET)
-data class GetPushRulesForScope(
-    @SerialName("user_id") val asUserId: UserId? = null
-) : MatrixEndpoint<Unit, PushRuleSet>
+data class GetPushRulesForScope(@SerialName("user_id") val asUserId: UserId? = null) :
+  MatrixEndpoint<Unit, PushRuleSet>
