@@ -15,6 +15,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 -->
 
+## [0.11.1]
+
+### Changed
+
+- Set default for orphaned room clean up to delete rooms older than one day for better testing
+- Disable verbose brainpool logger
+
 ## [0.11.0]
 
 ### Added

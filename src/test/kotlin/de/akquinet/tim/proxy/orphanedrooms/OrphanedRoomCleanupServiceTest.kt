@@ -39,7 +39,7 @@ class OrphanedRoomCleanupServiceTest :
 
         defaultConfig.enabled shouldBe true
         defaultConfig.checkIntervalDays shouldBe 1
-        defaultConfig.roomAgeThresholdDays shouldBe 14
+        defaultConfig.roomAgeThresholdDays shouldBe 1
       }
     }
 

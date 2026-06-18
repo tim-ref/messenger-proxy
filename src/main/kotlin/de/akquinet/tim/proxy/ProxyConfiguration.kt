@@ -97,7 +97,7 @@ data class ProxyConfiguration(
   data class OrphanedRoomCleanupConfig(
     val enabled: Boolean = true,
     val checkIntervalDays: Int = 1,
-    val roomAgeThresholdDays: Int = 14,
+    val roomAgeThresholdDays: Int = 1,
   )
 }
 

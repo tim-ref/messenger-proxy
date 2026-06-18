@@ -92,4 +92,4 @@ synapse:
 orphanedRoomCleanup:
   enabled: true
   checkIntervalDays: 1
-  roomAgeThresholdDays: 14
+  roomAgeThresholdDays: 1

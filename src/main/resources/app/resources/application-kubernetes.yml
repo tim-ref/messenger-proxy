@@ -92,4 +92,4 @@ synapse:
 orphanedRoomCleanup:
   enabled: ${ORPHANED_ROOM_CLEANUP_ENABLED:-true}
   checkIntervalDays: ${ORPHANED_ROOM_CLEANUP_INTERVAL_DAYS:-1}
-  roomAgeThresholdDays: ${ORPHANED_ROOM_CLEANUP_AGE_THRESHOLD_DAYS:-14}
+  roomAgeThresholdDays: ${ORPHANED_ROOM_CLEANUP_AGE_THRESHOLD_DAYS:-1}

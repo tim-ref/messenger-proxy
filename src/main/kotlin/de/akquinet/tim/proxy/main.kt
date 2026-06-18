@@ -75,12 +75,14 @@ import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
+import org.slf4j.bridge.SLF4JBridgeHandler
 
 private val klogger = KotlinLogging.logger {}
 
 suspend fun main(): Unit = coroutineScope {
-  // Suppress noisy BouncyCastle JSSE provider logs (uses java.util.logging)
-  java.util.logging.Logger.getLogger("org.bouncycastle").level = java.util.logging.Level.WARNING
+  // Route JUL through SLF4J so logback.xml controls BouncyCastle JSSE log levels
+  SLF4JBridgeHandler.removeHandlersForRootLogger()
+  SLF4JBridgeHandler.install()
 
   // BC providers required for certificates and TLS cipher suites using brainpool curves
   Security.insertProviderAt(BouncyCastleProvider(), 1)
