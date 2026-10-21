@@ -44,6 +44,7 @@ outboundProxy:
   caPrivateKeyFile: "/app/certificates/key.pem"
   domainWhiteList: ""
   ssoDomain: ""
+  certCacheDuration: 24h
 
 actuatorConfig:
   port: 1233

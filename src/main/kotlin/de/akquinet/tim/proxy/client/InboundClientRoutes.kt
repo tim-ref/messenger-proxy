@@ -414,6 +414,8 @@ class InboundClientRoutesImpl(
             for (domain in relevantDomains) {
               checkFederatedDomain(domain)
             }
+
+            invitedUserId?.let { checkInvitePermissionIfSameDomain(it, inviter).bind() }
           }
 
           val rawdataOperation =
@@ -466,12 +468,7 @@ class InboundClientRoutesImpl(
           if (config.enforceDomainList) {
             checkFederatedDomain(invited.domain)
             checkFederatedDomain(inviter.domain)
-            if (
-              timAuthorizationCheckConfiguration.concept == TimAuthorizationCheckConcept.PROXY &&
-                invited.domain == inviter.domain
-            ) {
-              synapseAdminAPIValidator.validateInvitePermission(invited.full, inviter).bind()
-            }
+            checkInvitePermissionIfSameDomain(invited, inviter).bind()
           }
           (requestBody to invited)
         }
@@ -506,6 +503,19 @@ class InboundClientRoutesImpl(
   private fun checkFederatedDomain(domain: String) {
     if (berechtigungsstufeEinsService.isUnfederatedDomain(domain)) {
       throw unfederatedDomainException(domain)
+    }
+  }
+
+  /**
+   * Implements check for invite permission (A_26021-01) for invites between users on the same
+   * domain, whether sent via a dedicated invite request or alongside room creation.
+   */
+  private suspend fun checkInvitePermissionIfSameDomain(invited: UserId, inviter: UserId) = either {
+    if (
+      timAuthorizationCheckConfiguration.concept == TimAuthorizationCheckConcept.PROXY &&
+        invited.domain == inviter.domain
+    ) {
+      synapseAdminAPIValidator.validateInvitePermission(invited.full, inviter).bind()
     }
   }
 

@@ -20,6 +20,7 @@ import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.utils.io.*
 import kotlinx.serialization.json.Json
 
 class MatrixOpenIdClient(
@@ -31,12 +32,14 @@ class MatrixOpenIdClient(
     val openIdResponse = sendOpenIdRequest(token)
     return when (openIdResponse.status) {
       HttpStatusCode.OK -> {
-        val responseBody = openIdResponse.call.response.bodyAsText()
-        val mxid = Json.decodeFromString<SuccessfulOpenIdResponse>(responseBody).sub
+        val mxid = Json.decodeFromString<SuccessfulOpenIdResponse>(openIdResponse.bodyAsText()).sub
         UserAuthenticationResult.Success(token, mxid)
       }
 
-      else -> UserAuthenticationResult.Failure(token)
+      else -> {
+        openIdResponse.bodyAsChannel().discard()
+        UserAuthenticationResult.Failure(token)
+      }
     }
   }
 

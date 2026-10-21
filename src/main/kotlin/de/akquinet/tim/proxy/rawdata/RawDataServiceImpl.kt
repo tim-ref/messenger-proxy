@@ -27,6 +27,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.plugins.*
 import io.ktor.server.request.*
+import io.ktor.utils.io.*
 import kotlinx.datetime.Clock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -204,9 +205,12 @@ class RawDataServiceImpl(
       )
 
   private suspend fun sendMessageLog(infoLogMessage: RawDataMetaData) {
-    httpClient.post(logInfoConfig.url) {
-      contentType(ContentType.Application.Json)
-      setBody(Json.encodeToString(infoLogMessage))
-    }
+    httpClient
+      .post(logInfoConfig.url) {
+        contentType(ContentType.Application.Json)
+        setBody(Json.encodeToString(infoLogMessage))
+      }
+      .bodyAsChannel()
+      .discard() // response is not of interest, just release the connection
   }
 }

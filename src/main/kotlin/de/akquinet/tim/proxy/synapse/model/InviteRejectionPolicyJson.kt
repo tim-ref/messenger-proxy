@@ -25,6 +25,7 @@ import de.akquinet.tim.proxy.synapse.client.resources.SynapseAdminAccountData
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
@@ -39,14 +40,25 @@ private const val allowAll = "allow all"
 private const val userExceptions = "userExceptions"
 private const val serverExceptions = "serverExceptions"
 private const val groupExceptions = "groupExceptions"
-private const val inInsuredPerson = "isInsuredPerson"
+private const val isInsuredPerson = "isInsuredPerson"
+private const val groupName = "groupName"
 
 private fun parseKeys(json: JsonElement?): Set<String> = json?.jsonObject?.keys ?: emptySet()
 
 private fun parseGroups(json: JsonElement?): Set<UserGroup> =
-  if (json?.jsonArray?.map(JsonElement::toString)?.contains(inInsuredPerson) ?: false)
+  if (
+    json?.jsonArray?.any {
+      when (it) {
+        is JsonPrimitive -> it.jsonPrimitive.contentOrNull == isInsuredPerson
+        is JsonObject -> it.jsonObject[groupName]?.jsonPrimitive?.contentOrNull == isInsuredPerson
+        else -> false
+      }
+    } ?: false
+  ) {
     setOf(UserGroup.INSURED_USERS)
-  else emptySet()
+  } else {
+    emptySet()
+  }
 
 private fun parsePermissionConfig(response: SynapseAdminAccountData.Response): JsonObject? {
   val globalAccountData = response.accountData[global]?.jsonObject

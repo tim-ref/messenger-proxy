@@ -40,7 +40,7 @@ class AccessTokenToUserIdImpl(
     val cachedUserId = cache.value[accessToken]
     return if (
       cachedUserId != null &&
-        cachedUserId.cachedAt < (Clock.System.now() + config.accessTokenToUserIdCacheDuration)
+        Clock.System.now() < (cachedUserId.cachedAt + config.accessTokenToUserIdCacheDuration)
     ) {
       cachedUserId.userId
     } else {
@@ -58,7 +58,12 @@ class AccessTokenToUserIdImpl(
           }
           .getOrThrow()
           .userId
-      cache.update { it + (accessToken to CachedUserId(fetchedUserId, Clock.System.now())) }
+      cache.update { currentMap ->
+        val now = Clock.System.now()
+        currentMap
+          .filterValues { now < (it.cachedAt + config.accessTokenToUserIdCacheDuration) }
+          .plus(accessToken to CachedUserId(fetchedUserId, now))
+      }
       fetchedUserId
     }
   }

@@ -150,6 +150,8 @@ class InboundClientCheckerImplTest :
           principal = UserIdPrincipal(UserId(full = "@me:example.com")),
           cause = null,
         )
+      coEvery { synapseAdminAPIValidator.validateInvitePermission(any(), any()) } returns
+        ValidationSuccess.right()
     }
 
     fun withCut(block: suspend ApplicationTestBuilder.() -> Unit) {
@@ -321,6 +323,26 @@ class InboundClientCheckerImplTest :
             response shouldHaveStatus OK
             response.bodyAsText() shouldEqualJson """{"room_id":"123:example.com"}"""
           }
+        }
+      }
+
+      // gemSpec_TI-M_Basis, A_26021-01 - Durchsetzung der akteurspezifischen
+      // Berechtigungskonfiguration: an invite sent along with createRoom must be subject to the
+      // same permission check as a separate POST /invite when inviter and invitee share a domain.
+      should("post create room should fail if invitee's permission config blocks the invite") {
+        coEvery { synapseAdminAPIValidator.validateInvitePermission(invited.full, inviter) } returns
+          InviteBlocked.left()
+
+        withCut {
+          val response =
+            client.post("/_matrix/client/v3/createRoom") {
+              bearerAuth("some.token")
+              accept(Application.Json)
+              contentType(Application.Json)
+              setBody(createRoomRequest)
+            }
+
+          response shouldHaveStatus Forbidden
         }
       }
 

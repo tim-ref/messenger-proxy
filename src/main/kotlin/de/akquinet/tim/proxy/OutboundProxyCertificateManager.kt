@@ -19,6 +19,7 @@ import io.netty.buffer.ByteBufAllocator
 import io.netty.handler.ssl.SslContext
 import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.SupportedCipherSuiteFilter
+import io.netty.util.ReferenceCounted
 import java.io.InputStreamReader
 import java.math.BigInteger
 import java.security.KeyPair
@@ -66,10 +67,15 @@ interface OutboundProxyCertificateManager {
 }
 
 class OutboundProxyCertificateManagerImpl(
-  config: ProxyConfiguration.OutboundProxyConfiguration,
+  private val config: ProxyConfiguration.OutboundProxyConfiguration,
   fileSystem: FileSystem,
 ) : OutboundProxyCertificateManager {
-  private data class CachedCertificate(val cert: X509Certificate, val key: PrivateKey)
+  private data class CachedCertificate(
+    val cert: X509Certificate,
+    val key: PrivateKey,
+    val sslContext: SslContext,
+    val cachedAt: Instant,
+  )
 
   private val certificateCache = MutableStateFlow<Map<String, CachedCertificate>>(mapOf())
   override val rootCaCertificate: X509Certificate =
@@ -93,80 +99,117 @@ class OutboundProxyCertificateManagerImpl(
       JcaPEMKeyConverter().getPrivateKey(privateKeyInfo)
     }
 
+  /**
+   * The cipher suites of the platform's default SSL context. Computing them allocates a full
+   * [SSLContext] plus key and trust managers, so it is done once and reused.
+   */
+  private val defaultCipherSuites: List<String> by lazy {
+    SSLContext.getInstance("TLSv1.2")
+      .apply {
+        val keyStore =
+          KeyStore.getInstance(KeyStore.getDefaultType()).apply { load(null, "".toCharArray()) }
+        init(
+          KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
+            .apply { init(keyStore, "".toCharArray()) }
+            .keyManagers,
+          TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+            .apply { init(keyStore) }
+            .trustManagers,
+          SecureRandom(),
+        )
+      }
+      .serverSocketFactory
+      .defaultCipherSuites
+      .toList()
+  }
+
   override fun impersonatingSslEngine(hostname: String): SSLEngine {
     // TODO use one certificate for all known federation domains with use of subjectAlternativeName
     // extension
     val now = Clock.System.now()
-    val generator = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }
-
-    val cachedCertificate = getCachedCertificate(hostname, generator, now)
-
-    val sslContext: SslContext = getSslContext(cachedCertificate)
-
-    return sslContext.newEngine(ByteBufAllocator.DEFAULT)
+    return getCachedCertificate(hostname, now).sslContext.newEngine(ByteBufAllocator.DEFAULT)
   }
 
-  private fun getSslContext(cachedCertificate: CachedCertificate): SslContext =
-    SslContextBuilder.forServer(cachedCertificate.key, cachedCertificate.cert, rootCaCertificate)
-      .ciphers(
-        SSLContext.getInstance("TLSv1.2")
-          .apply {
-            val keyStore =
-              KeyStore.getInstance(KeyStore.getDefaultType()).apply { load(null, "".toCharArray()) }
-            init(
-              KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
-                .apply { init(keyStore, "".toCharArray()) }
-                .keyManagers,
-              TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
-                .apply { init(keyStore) }
-                .trustManagers,
-              SecureRandom(),
-            )
-          }
-          .serverSocketFactory
-          .defaultCipherSuites
-          .toMutableList(),
-        SupportedCipherSuiteFilter.INSTANCE,
-      )
+  private fun buildSslContext(cert: X509Certificate, key: PrivateKey): SslContext =
+    SslContextBuilder.forServer(key, cert, rootCaCertificate)
+      .ciphers(defaultCipherSuites, SupportedCipherSuiteFilter.INSTANCE)
       .build()
 
-  private fun getCachedCertificate(hostname: String, generator: KeyPairGenerator, now: Instant) =
-    (certificateCache.value[hostname]
-      ?: certificateCache
-        .updateAndGet {
-          val serverKeyPair: KeyPair = generator.genKeyPair()
-          val impersonatingCertificate =
-            JcaX509CertificateConverter()
-              .getCertificate(
-                JcaX509v3CertificateBuilder(
-                    rootCaCertificate,
-                    BigInteger(160, SecureRandom()),
-                    Date.from(now.toJavaInstant()),
-                    Date.from((now + (365 * 5).days).toJavaInstant()),
-                    X500NameBuilder(BCStyle.INSTANCE).addRDN(BCStyle.CN, hostname).build(),
-                    serverKeyPair.public,
-                  )
-                  .addExtension(
-                    Extension.subjectKeyIdentifier,
-                    false,
-                    BcX509ExtensionUtils()
-                      .createSubjectKeyIdentifier(
-                        SubjectPublicKeyInfo.getInstance(serverKeyPair.public.encoded)
-                      ),
-                  )
-                  .addExtension(
-                    Extension.subjectAlternativeName,
-                    false,
-                    GeneralNames(GeneralName(GeneralName.dNSName, hostname)),
-                  )
-                  .addExtension(Extension.basicConstraints, false, BasicConstraints(false))
-                  .build(
-                    JcaContentSignerBuilder("SHA256withECDSA")
-                      .setProvider(BouncyCastleProvider())
-                      .build(privateKey)
-                  )
-              )
-          it + (hostname to CachedCertificate(impersonatingCertificate, serverKeyPair.private))
-        }[hostname]
-      ?: throw RuntimeException("cached certificate mysteriously disappeared"))
+  private fun getCachedCertificate(hostname: String, now: Instant): CachedCertificate {
+    val cached = certificateCache.value[hostname]
+    if (cached != null && now < (cached.cachedAt + config.certCacheDuration)) {
+      return cached
+    }
+
+    val generator = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }
+    val serverKeyPair: KeyPair = generator.genKeyPair()
+    val impersonatingCertificate =
+      JcaX509CertificateConverter()
+        .getCertificate(
+          JcaX509v3CertificateBuilder(
+              rootCaCertificate,
+              BigInteger(160, SecureRandom()),
+              Date.from(now.toJavaInstant()),
+              Date.from((now + (365 * 5).days).toJavaInstant()),
+              X500NameBuilder(BCStyle.INSTANCE).addRDN(BCStyle.CN, hostname).build(),
+              serverKeyPair.public,
+            )
+            .addExtension(
+              Extension.subjectKeyIdentifier,
+              false,
+              BcX509ExtensionUtils()
+                .createSubjectKeyIdentifier(
+                  SubjectPublicKeyInfo.getInstance(serverKeyPair.public.encoded)
+                ),
+            )
+            .addExtension(
+              Extension.subjectAlternativeName,
+              false,
+              GeneralNames(GeneralName(GeneralName.dNSName, hostname)),
+            )
+            .addExtension(Extension.basicConstraints, false, BasicConstraints(false))
+            .build(
+              JcaContentSignerBuilder("SHA256withECDSA")
+                .setProvider(BouncyCastleProvider())
+                .build(privateKey)
+            )
+        )
+    val newEntry =
+      CachedCertificate(
+        cert = impersonatingCertificate,
+        key = serverKeyPair.private,
+        sslContext = buildSslContext(impersonatingCertificate, serverKeyPair.private),
+        cachedAt = now,
+      )
+
+    val evicted = mutableListOf<SslContext>()
+    val updatedCache =
+      certificateCache.updateAndGet { currentCache ->
+        evicted.clear()
+        val kept = mutableMapOf<String, CachedCertificate>()
+        for ((host, entry) in currentCache) {
+          if (host == hostname || now >= (entry.cachedAt + config.certCacheDuration)) {
+            evicted.add(entry.sslContext)
+          } else {
+            kept[host] = entry
+          }
+        }
+        kept[hostname] = newEntry
+        kept
+      }
+    evicted.forEach { releaseSilently(it) }
+
+    return updatedCache[hostname]
+      ?: throw RuntimeException("cached certificate mysteriously disappeared")
+  }
+
+  private fun releaseSilently(sslContext: SslContext) {
+    if (sslContext is ReferenceCounted) {
+      try {
+        sslContext.release()
+      } catch (_: IllegalStateException) {
+        // already released
+      }
+    }
+  }
 }

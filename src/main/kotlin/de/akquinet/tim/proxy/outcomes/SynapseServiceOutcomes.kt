@@ -17,6 +17,7 @@ package de.akquinet.tim.proxy.outcomes
 
 import de.akquinet.tim.proxy.commons.HttpFailure
 import de.akquinet.tim.proxy.commons.HttpFailureWithException
+import de.akquinet.tim.proxy.synapse.SynapseService
 import io.ktor.http.HttpStatusCode
 
 data class GetEventApiFailure(override val exception: Throwable) : HttpFailureWithException {
@@ -24,16 +25,34 @@ data class GetEventApiFailure(override val exception: Throwable) : HttpFailureWi
     get() = "Could not use EventDetails API, cause: ${exception.localizedMessage}"
 }
 
-data class FailedToGetAdminAccessToken(override val exception: Throwable) :
-  HttpFailureWithException {
+sealed interface AdminAccessTokenFailure : HttpFailure
+
+data class FailedToGetAdminAccessToken(val exception: Throwable) : AdminAccessTokenFailure {
   override val message: String
     get() = "Could not get admin access token cause: ${exception.localizedMessage}"
+}
+
+data object AdminAccessTokenNotSet : AdminAccessTokenFailure {
+  override val message: String
+    get() = "The admin access token is not set"
 }
 
 data class CouldNotGetEventDetails(val roomId: String, val eventId: String, val error: String) :
   HttpFailure {
   override val message: String
     get() = "Could not get details of room: $roomId and event: $eventId, cause: $error"
+
+  override val httpStatusCode: HttpStatusCode
+    get() = HttpStatusCode.BadGateway
+}
+
+/**
+ * Synapse rejected the admin access token. The token is cached, so this tells [SynapseService] to
+ * log in again and retry once instead of failing the request.
+ */
+data class AdminTokenRejected(val error: String) : HttpFailure {
+  override val message: String
+    get() = "Synapse rejected the admin access token, cause: $error"
 
   override val httpStatusCode: HttpStatusCode
     get() = HttpStatusCode.BadGateway

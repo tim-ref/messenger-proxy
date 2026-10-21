@@ -22,6 +22,7 @@ import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.utils.io.*
 import java.net.URI
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -97,12 +98,13 @@ class FederationListCacheImpl(
       }
 
     return when (val status = response.status) {
-      HttpStatusCode.OK -> {
-        val content = response.bodyAsText()
-        RequestFileResult.NewFile(content) { it.version.toString() }
-      }
+      HttpStatusCode.OK ->
+        RequestFileResult.NewFile(response.bodyAsText()) { it.version.toString() }
 
-      HttpStatusCode.NotModified -> RequestFileResult.NotModified()
+      HttpStatusCode.NotModified -> {
+        response.bodyAsChannel().discard()
+        RequestFileResult.NotModified()
+      }
 
       else -> {
         val content = response.bodyAsText()

@@ -46,6 +46,7 @@ outboundProxy:
   caPrivateKeyFile: "/app/certificates/key.pem"
   domainWhiteList: ${FORWARD_PROXY_WHITE_DOMAIN_LIST}
   ssoDomain: ${FORWARD_PROXY_SSO_DOMAIN}
+  certCacheDuration: 24h
 
 actuatorConfig:
   port: ${HEALTHCHECK_PORT}

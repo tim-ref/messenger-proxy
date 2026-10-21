@@ -16,7 +16,6 @@
 package de.akquinet.tim.proxy
 
 import de.akquinet.tim.proxy.extensions.filterUnsafeHeaders
-import de.akquinet.tim.proxy.extensions.isChunkedTransferEncoding
 import de.akquinet.tim.proxy.rawdata.RawDataService
 import de.akquinet.tim.proxy.rawdata.model.Operation
 import de.akquinet.tim.proxy.streaming.RequestWriter
@@ -26,40 +25,35 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.headers
 import io.ktor.client.request.prepareRequest
-import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.request.url
 import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Url
-import io.ktor.http.content.OutgoingContent
-import io.ktor.http.contentType
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.httpVersion
 import io.ktor.server.request.receive
 import io.ktor.server.request.uri
-import io.ktor.server.response.ResponseHeaders
 import io.ktor.server.response.respond
-import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
-import io.ktor.util.toByteArray
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.writer
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
-import org.koin.core.time.measureTimedValue
 
 private val log = KotlinLogging.logger {}
 
-/** Forwards an incoming request, and relays the destination's response. */
+/**
+ * Forwards an incoming request, and relays the destination's response.
+ *
+ * The response body is streamed from the upstream channel straight to the client. The upstream
+ * [HttpResponse] is bound to the `execute { }` block, so its body is released when this function
+ * returns, normally or exceptionally.
+ */
 suspend fun forwardRequest(
   call: ApplicationCall,
   httpClient: HttpClient,
@@ -69,8 +63,8 @@ suspend fun forwardRequest(
   val start = System.nanoTime()
   val requestBody: ByteArray = bodyJson ?: call.receive()
 
-  val response =
-    httpClient.request {
+  return httpClient
+    .prepareRequest {
       method = call.request.httpMethod
       url(destinationUrl)
       val requestHeaders = call.request.headers
@@ -79,15 +73,11 @@ suspend fun forwardRequest(
       headers { appendAll(safeRequestHeaders) }
       setBody(requestBody)
     }
-  sendResponse(response, call)
-  logOutgoingResponse(call, destinationUrl, response)
-
-  return Quadruple(
-    call.request,
-    response,
-    (System.nanoTime() - start) / 1000000,
-    response.bodyAsText().length,
-  )
+    .execute { response ->
+      val bodySize = streamResponse(response, call)
+      logOutgoingResponse(call, destinationUrl, response, bodySize)
+      Quadruple(call.request, response, (System.nanoTime() - start) / 1_000_000, bodySize)
+    }
 }
 
 suspend fun forwardRequestWithRawData(
@@ -125,39 +115,33 @@ suspend fun forwardRequestWithDefaultResponse(
   defaultResponseText: String,
   bodyJson: ByteArray?,
 ): Quadruple<ApplicationRequest, HttpResponse, Long, Int> {
-  val (response, elapsedMilliseconds) =
-    measureTimedValue {
-      val requestBody: ByteArray = bodyJson ?: call.receive()
+  val start = System.nanoTime()
+  val requestBody: ByteArray = bodyJson ?: call.receive()
 
-      val homeserverResponse =
-        httpClient.request {
-          method = call.request.httpMethod
-          url(destinationUrl)
-          val requestHeaders = call.request.headers
-          logIncomingRequest(call, destinationUrl, requestBody, requestHeaders)
-          headers { appendAll(requestHeaders) }
-          setBody(requestBody)
-        }
-
-      if (homeserverResponse.status == HttpStatusCode.NotFound) {
-        call.respondText(
-          status = HttpStatusCode.OK,
-          contentType = ContentType.Application.Json,
-          text = defaultResponseText,
-        )
-      } else {
-        sendResponse(homeserverResponse, call)
-      }
-      logOutgoingResponse(call, destinationUrl, homeserverResponse)
-      homeserverResponse
+  return httpClient
+    .prepareRequest {
+      method = call.request.httpMethod
+      url(destinationUrl)
+      val requestHeaders = call.request.headers
+      logIncomingRequest(call, destinationUrl, requestBody, requestHeaders)
+      headers { appendAll(requestHeaders) }
+      setBody(requestBody)
     }
-
-  return Quadruple(
-    call.request,
-    response,
-    elapsedMilliseconds.toLong(),
-    response.bodyAsText().length,
-  )
+    .execute { homeserverResponse ->
+      val bodySize =
+        if (homeserverResponse.status == HttpStatusCode.NotFound) {
+          call.respondText(
+            status = HttpStatusCode.OK,
+            contentType = ContentType.Application.Json,
+            text = defaultResponseText,
+          )
+          defaultResponseText.length
+        } else {
+          streamResponse(homeserverResponse, call)
+        }
+      logOutgoingResponse(call, destinationUrl, homeserverResponse, bodySize)
+      Quadruple(call.request, homeserverResponse, (System.nanoTime() - start) / 1_000_000, bodySize)
+    }
 }
 
 suspend fun forwardMediaRequest(
@@ -189,39 +173,38 @@ suspend fun forwardMediaRequest(
     }
 }
 
-private suspend fun sendResponse(response: HttpResponse, call: ApplicationCall) {
-  val responseHeaders = response.headers
-  val safeRequestHeaders = responseHeaders.filterUnsafeHeaders()
-  if (responseHeaders.isChunkedTransferEncoding) {
-    val body = response.bodyAsChannel()
-    call.respond(
-      object : OutgoingContent.ReadChannelContent() {
-        override val headers: Headers = safeRequestHeaders
-        override val status: HttpStatusCode = response.status
-
-        override fun readFrom(): ByteReadChannel = body
+/**
+ * Streams [response]'s body to the client via [StreamingResponseReader]. Returns the number of body
+ * bytes relayed, for raw data size accounting.
+ */
+private suspend fun streamResponse(response: HttpResponse, call: ApplicationCall): Int =
+  coroutineScope {
+    val upstream: ByteReadChannel = response.body()
+    var bytesStreamed = 0L
+    val writerJob =
+      writer(autoFlush = true) {
+        while (!upstream.isClosedForRead) {
+          val packet = upstream.readRemaining(DEFAULT_BUFFER_SIZE.toLong())
+          bytesStreamed += packet.remaining
+          channel.writePacket(packet)
+        }
       }
-    )
-  } else {
-    val body: ByteArray = response.bodyAsChannel().toByteArray()
-    call.response.headers.appendAll(safeRequestHeaders)
-    call.respondBytes(body, response.contentType(), response.status)
+    call.respond(StreamingResponseReader(response, writerJob.channel))
+    writerJob.join()
+    bytesStreamed.toInt()
   }
-}
 
 private fun logOutgoingResponse(
   call: ApplicationCall,
   destinationUrl: Url,
   response: HttpResponse,
-) = runBlocking { // this: CoroutineScope
-  launch {
-    val responseBody = response.bodyAsText()
-    log.debug {
-      "Response to Request from ${call.request.uri} \n" +
-        "to $destinationUrl \n" +
-        "with headers: ${response.headers.entries().map { "${it.key}: ${it.value}" }} \n" +
-        "and body: $responseBody \nresponse status: ${response.status.value}"
-    }
+  bodySize: Int,
+) {
+  log.debug {
+    "Response to Request from ${call.request.uri} \n" +
+      "to $destinationUrl \n" +
+      "with headers: ${response.headers.entries().map { "${it.key}: ${it.value}" }} \n" +
+      "response status: ${response.status.value} body bytes: $bodySize"
   }
 }
 
@@ -237,8 +220,4 @@ private fun logIncomingRequest(
       "with headers: ${requestHeaders.entries().map { "${it.key}: ${it.value}" }} \n" +
       "and body: $requestBody"
   }
-}
-
-private fun ResponseHeaders.appendAll(headers: Headers) {
-  headers.forEach { name, values -> values.forEach { append(name, it) } }
 }

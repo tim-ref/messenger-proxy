@@ -19,6 +19,7 @@ import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import de.akquinet.tim.proxy.config.SynapseClientConfig
+import de.akquinet.tim.proxy.outcomes.AdminTokenRejected
 import de.akquinet.tim.proxy.outcomes.CouldNotDeleteRoom
 import de.akquinet.tim.proxy.outcomes.CouldNotGetAccountData
 import de.akquinet.tim.proxy.outcomes.CouldNotGetEventDetails
@@ -49,6 +50,7 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType.Application
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
@@ -60,9 +62,10 @@ import kotlinx.serialization.json.Json
  * @see [https://element-hq.github.io/synapse/latest/usage/administration/admin_api/index.html]
  */
 class SynapseClient(engine: HttpClientEngine, config: SynapseClientConfig) {
+  private val json = Json { ignoreUnknownKeys = true }
   private val httpClient =
     HttpClient(engine) {
-      install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+      install(ContentNegotiation) { json(json) }
       install(Resources)
       defaultRequest {
         url(config.baseUrl)
@@ -110,10 +113,12 @@ class SynapseClient(engine: HttpClientEngine, config: SynapseClientConfig) {
         .mapLeft { GetEventApiFailure(it) }
         .bind()
 
+    val responseBody = response.bodyAsText()
+    ensure(response.status != HttpStatusCode.Unauthorized) { AdminTokenRejected(responseBody) }
     ensure(response.status.isSuccess()) {
-      CouldNotGetEventDetails(roomId = roomId, eventId = eventId, error = response.bodyAsText())
+      CouldNotGetEventDetails(roomId = roomId, eventId = eventId, error = responseBody)
     }
-    response.body<SynapseAdminEvent.Response>().event.originTimestamp
+    json.decodeFromString<SynapseAdminEvent.Response>(responseBody).event.originTimestamp
   }
 
   // Room Admin API (A_28564-01) -----------------------------------------------
@@ -141,10 +146,12 @@ class SynapseClient(engine: HttpClientEngine, config: SynapseClientConfig) {
         .mapLeft { RoomApiFailure(it) }
         .bind()
 
+    val responseBody = response.bodyAsText()
+    ensure(response.status != HttpStatusCode.Unauthorized) { AdminTokenRejected(responseBody) }
     ensure(response.status.isSuccess()) {
-      UnexpectedRoomsApiResponse(httpStatusCode = response.status, error = response.bodyAsText())
+      UnexpectedRoomsApiResponse(httpStatusCode = response.status, error = responseBody)
     }
-    response.body<SynapseAdminRooms.Response>()
+    json.decodeFromString<SynapseAdminRooms.Response>(responseBody)
   }
 
   /**
@@ -165,10 +172,12 @@ class SynapseClient(engine: HttpClientEngine, config: SynapseClientConfig) {
         .mapLeft { RoomApiFailure(it) }
         .bind()
 
+    val responseBody = response.bodyAsText()
+    ensure(response.status != HttpStatusCode.Unauthorized) { AdminTokenRejected(responseBody) }
     ensure(response.status.isSuccess()) {
-      CouldNotGetRoomState(roomId = roomId, error = response.bodyAsText())
+      CouldNotGetRoomState(roomId = roomId, error = responseBody)
     }
-    response.body<SynapseAdminRoomState.Response>()
+    json.decodeFromString<SynapseAdminRoomState.Response>(responseBody)
   }
 
   /**
@@ -189,10 +198,12 @@ class SynapseClient(engine: HttpClientEngine, config: SynapseClientConfig) {
         .mapLeft { RoomApiFailure(it) }
         .bind()
 
+    val responseBody = response.bodyAsText()
+    ensure(response.status != HttpStatusCode.Unauthorized) { AdminTokenRejected(responseBody) }
     ensure(response.status.isSuccess()) {
-      CouldNotGetRoomMessages(roomId = roomId, error = response.bodyAsText())
+      CouldNotGetRoomMessages(roomId = roomId, error = responseBody)
     }
-    response.body<SynapseAdminRoomMessages.Response>()
+    json.decodeFromString<SynapseAdminRoomMessages.Response>(responseBody)
   }
 
   /**
@@ -214,10 +225,12 @@ class SynapseClient(engine: HttpClientEngine, config: SynapseClientConfig) {
         .mapLeft { RoomApiFailure(it) }
         .bind()
 
+    val responseBody = response.bodyAsText()
+    ensure(response.status != HttpStatusCode.Unauthorized) { AdminTokenRejected(responseBody) }
     ensure(response.status.isSuccess()) {
-      CouldNotDeleteRoom(roomId = roomId, error = response.bodyAsText())
+      CouldNotDeleteRoom(roomId = roomId, error = responseBody)
     }
-    response.body<SynapseAdminDeleteRoom.Response>()
+    json.decodeFromString<SynapseAdminDeleteRoom.Response>(responseBody)
   }
 
   suspend fun getAccountData(userId: String) = either {
@@ -231,9 +244,11 @@ class SynapseClient(engine: HttpClientEngine, config: SynapseClientConfig) {
         .mapLeft { GetAccountDataApiFailure(it) }
         .bind()
 
+    val responseBody = response.bodyAsText()
+    ensure(response.status != HttpStatusCode.Unauthorized) { AdminTokenRejected(responseBody) }
     ensure(response.status.isSuccess()) {
-      CouldNotGetAccountData(userId = userId, error = response.bodyAsText())
+      CouldNotGetAccountData(userId = userId, error = responseBody)
     }
-    response.body<SynapseAdminAccountData.Response>()
+    json.decodeFromString<SynapseAdminAccountData.Response>(responseBody)
   }
 }

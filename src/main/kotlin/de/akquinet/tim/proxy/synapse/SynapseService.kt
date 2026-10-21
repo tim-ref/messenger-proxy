@@ -17,13 +17,24 @@ package de.akquinet.tim.proxy.synapse
 
 import arrow.core.Either
 import arrow.core.flatMap
+import arrow.core.raise.either
+import arrow.core.raise.ensureNotNull
+import arrow.core.raise.recover
+import arrow.core.recover
+import arrow.core.right
+import de.akquinet.tim.proxy.commons.HttpFailure
 import de.akquinet.tim.proxy.config.SynapseClientConfig
 import de.akquinet.tim.proxy.orphanedrooms.OrphanedRoomChecker
+import de.akquinet.tim.proxy.outcomes.AdminAccessTokenFailure
+import de.akquinet.tim.proxy.outcomes.AdminAccessTokenNotSet
+import de.akquinet.tim.proxy.outcomes.AdminTokenRejected
 import de.akquinet.tim.proxy.outcomes.FailedToGetAdminAccessToken
 import de.akquinet.tim.proxy.synapse.client.SynapseClient
 import de.akquinet.tim.proxy.synapse.client.resources.SynapseAdminRooms
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import mu.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -31,27 +42,74 @@ private const val PREFIX_A_28564 = "A_28564-01"
 
 class SynapseService(val synapseClient: SynapseClient, val config: SynapseClientConfig) {
 
+  private val loginMutex = Mutex()
+  @Volatile private var adminToken: String? = null
+
   /**
-   * Acquires an admin access token and sets it on the SynapseClient.
+   * Returns the admin access token, logging in only if none is cached. Every login creates another
+   * device and access token on Synapse that is never logged out, so the token is reused until
+   * Synapse rejects it.
    *
    * @return Either the access token on success, or FailedToGetAdminAccessToken on failure
    */
-  suspend fun acquireAdminToken(): Either<FailedToGetAdminAccessToken, String> =
-    Either.catch {
-        synapseClient
-          .login(
-            userIdOrLocalpart =
-              config.username?.value ?: throw RuntimeException("Admin user name not set"),
-            password =
-              config.password?.value ?: throw RuntimeException("Admin user password not set"),
-          )
-          .accessToken
-          .also { synapseClient.bearerToken = it }
-      }
-      .mapLeft { FailedToGetAdminAccessToken(it) }
+  suspend fun acquireAdminToken(): Either<AdminAccessTokenFailure, String> =
+    either { ensureNotNull(adminToken) { AdminAccessTokenNotSet } }.recover { login().bind() }
 
-  suspend fun getEventTimestamp(roomId: String, eventId: String) =
-    acquireAdminToken().flatMap { synapseClient.getEventTimestamp(roomId, eventId) }
+  private suspend fun login(): Either<FailedToGetAdminAccessToken, String> =
+    loginMutex.withLock {
+      // another caller may have logged in while this one waited for the lock
+      adminToken?.let {
+        return@withLock it.right()
+      }
+      Either.catch {
+          synapseClient
+            .login(
+              userIdOrLocalpart =
+                config.username?.value ?: throw RuntimeException("Admin user name not set"),
+              password =
+                config.password?.value ?: throw RuntimeException("Admin user password not set"),
+            )
+            .accessToken
+            .also {
+              synapseClient.bearerToken = it
+              adminToken = it
+            }
+        }
+        .mapLeft { FailedToGetAdminAccessToken(it) }
+    }
+
+  private suspend fun discardAdminToken(rejected: String) =
+    loginMutex.withLock {
+      // keep a token that someone else has already renewed in the meantime
+      if (adminToken == rejected) adminToken = null
+    }
+
+  /**
+   * Runs [call] with the cached admin token. If Synapse rejects that token, logs in once more and
+   * repeats the call, so a token invalidated on the homeserver does not break the proxy until it is
+   * restarted.
+   */
+  private suspend fun <T> withAdminToken(
+    call: suspend () -> Either<HttpFailure, T>
+  ): Either<HttpFailure, T> = either {
+    val token = acquireAdminToken().bind()
+
+    call()
+      .recover { failure ->
+        if (failure is AdminTokenRejected) {
+          logger.info { "Synapse rejected the admin access token, logging in again" }
+          discardAdminToken(token)
+          acquireAdminToken().flatMap { call() }.bind()
+        } else {
+          raise(failure)
+        }
+      }
+      .bind()
+  }
+
+  suspend fun getEventTimestamp(roomId: String, eventId: String) = withAdminToken {
+    synapseClient.getEventTimestamp(roomId, eventId)
+  }
 
   /**
    * Performs orphaned room cleanup by scanning all rooms and deleting those that match A_28564-01
@@ -73,8 +131,7 @@ class SynapseService(val synapseClient: SynapseClient, val config: SynapseClient
       roomsPage.rooms.forEach { room ->
         scannedCount++
         if (isOrphanedRoom(room, checker)) {
-          synapseClient
-            .deleteRoom(room.roomId, purge = true, block = false)
+          withAdminToken { synapseClient.deleteRoom(room.roomId, purge = true, block = false) }
             .fold(
               ifLeft = { failure ->
                 logger.warn {
@@ -98,8 +155,7 @@ class SynapseService(val synapseClient: SynapseClient, val config: SynapseClient
   private fun pagedRoomsFlow(): Flow<SynapseAdminRooms.Response> = flow {
     var from: Int? = null
     do {
-      synapseClient
-        .listRooms(limit = 100, from = from)
+      withAdminToken { synapseClient.listRooms(limit = 100, from = from) }
         .onLeft { failure ->
           logger.error { "$PREFIX_A_28564 Failed to fetch rooms page: ${failure.message}" }
           from = null
@@ -133,7 +189,7 @@ class SynapseService(val synapseClient: SynapseClient, val config: SynapseClient
     }
 
     // Criterion 1: Room contains only state events (check before fetching state for efficiency)
-    val messagesResult = synapseClient.getRoomMessages(roomId, limit = 50)
+    val messagesResult = withAdminToken { synapseClient.getRoomMessages(roomId, limit = 50) }
     if (messagesResult.isLeft()) {
       logger.warn { "$PREFIX_A_28564 Could not get messages for room $roomId, skipping" }
       return false
@@ -145,7 +201,7 @@ class SynapseService(val synapseClient: SynapseClient, val config: SynapseClient
     }
 
     // Get room state (needed for member and timestamp checks)
-    val stateResult = synapseClient.getRoomState(roomId)
+    val stateResult = withAdminToken { synapseClient.getRoomState(roomId) }
     if (stateResult.isLeft()) {
       logger.warn { "$PREFIX_A_28564 Could not get state for room $roomId, skipping" }
       return false
@@ -171,6 +227,7 @@ class SynapseService(val synapseClient: SynapseClient, val config: SynapseClient
     return true
   }
 
-  suspend fun getAccountData(userId: String) =
-    acquireAdminToken().flatMap { synapseClient.getAccountData(userId) }
+  suspend fun getAccountData(userId: String) = withAdminToken {
+    synapseClient.getAccountData(userId)
+  }
 }

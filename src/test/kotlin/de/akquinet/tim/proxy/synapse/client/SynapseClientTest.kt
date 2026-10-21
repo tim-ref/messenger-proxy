@@ -17,6 +17,7 @@ package de.akquinet.tim.proxy.synapse.client
 
 import com.sksamuel.hoplite.Secret
 import de.akquinet.tim.proxy.config.SynapseClientConfig
+import de.akquinet.tim.proxy.outcomes.AdminTokenRejected
 import de.akquinet.tim.proxy.outcomes.CouldNotGetAccountData
 import de.akquinet.tim.proxy.outcomes.CouldNotGetEventDetails
 import de.akquinet.tim.proxy.outcomes.GetAccountDataApiFailure
@@ -204,6 +205,22 @@ class SynapseClientTest :
           )
 
         result.shouldBeLeft().apply { shouldBeTypeOf<GetEventApiFailure>() }
+      }
+
+      should("report a rejected admin token so it can be renewed") {
+        val mockEngine = MockEngine { _ ->
+          respond(content = "Invalid access token", status = HttpStatusCode.Unauthorized)
+        }
+        val apiClient = SynapseClient(mockEngine, clientConfig)
+        apiClient.bearerToken = "stale token"
+
+        val result =
+          apiClient.getEventTimestamp(
+            "!mscvqgqpHYjBGDxNym:snpse.org",
+            "$143273582443PhrSn:example.org",
+          )
+
+        result.shouldBeLeft().apply { shouldBeTypeOf<AdminTokenRejected>() }
       }
 
       should("return error if event not found") {

@@ -19,6 +19,7 @@ import arrow.core.Either
 import com.sksamuel.hoplite.Secret
 import de.akquinet.tim.proxy.config.SynapseClientConfig
 import de.akquinet.tim.proxy.orphanedrooms.OrphanedRoomChecker
+import de.akquinet.tim.proxy.outcomes.AdminTokenRejected
 import de.akquinet.tim.proxy.outcomes.CouldNotGetEventDetails
 import de.akquinet.tim.proxy.outcomes.CouldNotGetRoomMessages
 import de.akquinet.tim.proxy.outcomes.CouldNotGetRoomState
@@ -179,6 +180,53 @@ class SynapseServiceTest :
       }
     }
 
+    context("admin token handling") {
+      val roomId = "!room1:matrix.org"
+      val eventId = "\$fukweghifu23:localhost"
+
+      should("log in only once for repeated calls") {
+        coEvery {
+          mockSynapseClient.login(userIdOrLocalpart = "username", password = "password")
+        } returns LoginResponseBody("access token", "@admin:snpse.org")
+        coEvery { mockSynapseClient.getEventTimestamp(roomId, eventId) } returns Either.Right(1L)
+        coEvery { mockSynapseClient.getAccountData(userId = "@test-user:snpse.org") } returns
+          Either.Right(SynapseAdminAccountData.Response(accountData = JsonObject(emptyMap())))
+
+        synapseService.getEventTimestamp(roomId, eventId)
+        synapseService.getEventTimestamp(roomId, eventId)
+        synapseService.getAccountData("@test-user:snpse.org")
+
+        coVerify(exactly = 1) { mockSynapseClient.login("username", "password") }
+      }
+
+      should("log in again when the cached token was rejected") {
+        coEvery {
+          mockSynapseClient.login(userIdOrLocalpart = "username", password = "password")
+        } returns LoginResponseBody("access token", "@admin:snpse.org")
+        coEvery { mockSynapseClient.getEventTimestamp(roomId, eventId) } returns
+          Either.Left(AdminTokenRejected("token expired")) andThen
+          Either.Right(1L)
+
+        val result = synapseService.getEventTimestamp(roomId, eventId)
+
+        result shouldBeRight 1L
+        coVerify(exactly = 2) { mockSynapseClient.login("username", "password") }
+      }
+
+      should("give up after a second rejection instead of looping") {
+        coEvery {
+          mockSynapseClient.login(userIdOrLocalpart = "username", password = "password")
+        } returns LoginResponseBody("access token", "@admin:snpse.org")
+        coEvery { mockSynapseClient.getEventTimestamp(roomId, eventId) } returns
+          Either.Left(AdminTokenRejected("token expired"))
+
+        val result = synapseService.getEventTimestamp(roomId, eventId)
+
+        result.shouldBeLeft().apply { shouldBeTypeOf<AdminTokenRejected>() }
+        coVerify(exactly = 2) { mockSynapseClient.login("username", "password") }
+      }
+    }
+
     context("performOrphanedRoomCleanup") {
       val roomId = "!orphaned:snpse.org"
       val creator = "@creator:snpse.org"
@@ -223,6 +271,20 @@ class SynapseServiceTest :
           sender = sender,
           eventId = "\$event:snpse.org",
         )
+
+      should("renew a rejected token instead of aborting the scan") {
+        setupLoginMock()
+        val mockChecker = mockk<OrphanedRoomChecker>()
+
+        coEvery { mockSynapseClient.listRooms(limit = 100, from = null) } returns
+          Either.Left(AdminTokenRejected("token expired")) andThen
+          Either.Right(createRoomsResponse())
+
+        synapseService.performOrphanedRoomCleanup(mockChecker)
+
+        coVerify(exactly = 2) { mockSynapseClient.login("username", "password") }
+        coVerify(exactly = 2) { mockSynapseClient.listRooms(limit = 100, from = null) }
+      }
 
       should("delete room when all criteria are met") {
         setupLoginMock()

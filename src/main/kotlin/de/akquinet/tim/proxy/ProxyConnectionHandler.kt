@@ -25,6 +25,7 @@ import io.netty.channel.SimpleChannelInboundHandler
 import io.netty.handler.codec.http.*
 import io.netty.handler.codec.http.HttpMethod
 import io.netty.handler.ssl.SslHandler
+import io.netty.util.ReferenceCountUtil
 import mu.KotlinLogging
 
 private val log = KotlinLogging.logger {}
@@ -45,8 +46,12 @@ class ProxyConnectionHandler(private val manager: OutboundProxyCertificateManage
     } else if (msg is LastHttpContent) {
       log.trace { "flush response" }
       ctx.flush()
+      // this handler is constructed with autoRelease = false, so a message that is not passed on
+      // has to be released here, otherwise its buffer leaks
+      ReferenceCountUtil.release(msg)
     } else {
       log.warn { "Dropping message because HTTP object was not an HttpMessage: $msg" }
+      ReferenceCountUtil.release(msg)
     }
   }
 
@@ -54,9 +59,14 @@ class ProxyConnectionHandler(private val manager: OutboundProxyCertificateManage
     if (httpRequest.decoderResult().isFailure) {
       log.warn { "could not parse message from client: ${httpRequest.decoderResult()}" }
       ctx.closeWithBadRequestResponse("Unable to parse HTTP message")
+      ReferenceCountUtil.release(httpRequest)
     } else {
       when (httpRequest.method()) {
-        HttpMethod.CONNECT -> handleHttpMethodConnect(httpRequest, ctx)
+        HttpMethod.CONNECT -> {
+          handleHttpMethodConnect(httpRequest, ctx)
+          // a CONNECT request is answered here instead of being passed on, so it is released here
+          ReferenceCountUtil.release(httpRequest)
+        }
         else -> {
           log.trace { "got request ${httpRequest.uri()} and inject destination $destination" }
           destination?.also { httpRequest.headers()[HttpHeaders.Host] = destination }

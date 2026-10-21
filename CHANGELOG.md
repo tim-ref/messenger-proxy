@@ -15,6 +15,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 -->
 
+## [0.11.2]
+
+### Added
+
+- Manual pipeline jobs to build a snapshot image and deploy it to EU from a feature branch with an open merge request to develop, without triggering on every commit
+
+### Fixed
+
+- Enforce the invitee's permission configuration (A_26021-01) for an invite sent along with room creation to a user on the same domain, closing a bypass of that check (TIMREF-2506)
+- Fixed AccessTokenToUserId cache expiry condition that was always true, causing unbounded cache growth
+- Fixed unbounded certificate cache in OutboundProxyCertificateManager by adding a configurable TTL, eviction and reuse of the SslContext
+- Fixed unbounded HTTP call timeout and added an explicit OkHttp connection pool, so connections are reclaimed
+- Fixed unconsumed response bodies in health checks, OpenID authentication and raw data logging, preventing OkHttp connection reuse
+- Fixed double response body consumption and `runBlocking` usage in request forwarding, preventing connection leaks
+- Fixed unconsumed federation list responses and unreleased Netty buffers in the outbound proxy's CONNECT handler
+- Cache the Synapse admin access token instead of logging in for every admin request, which created a device and an access token per request that was never logged out
+
 ## [0.11.1]
 
 ### Changed

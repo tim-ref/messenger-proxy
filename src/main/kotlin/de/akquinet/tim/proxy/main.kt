@@ -52,11 +52,12 @@ import de.akquinet.tim.proxy.validation.RequestContentValidator
 import de.akquinet.tim.proxy.validation.SynapseAdminAPIValidator
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import java.security.Security
 import java.time.Clock
-import java.time.Duration
+import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
@@ -66,6 +67,7 @@ import mu.KotlinLogging
 import net.folivo.trixnity.api.client.MatrixApiClient
 import net.folivo.trixnity.core.serialization.createDefaultEventContentSerializerMappings
 import net.folivo.trixnity.core.serialization.createMatrixEventJson
+import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okio.FileSystem
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -162,25 +164,37 @@ private fun initiateKoin(config: ProxyConfiguration) =
     .koin
 
 private fun createGeneralHttpClient(config: ProxyConfiguration): HttpClient {
+  val httpClientConfig = config.httpClientConfig
   val generalHttpClient =
     HttpClient(OkHttp) {
       install(ContentNegotiation) { json() }
+      install(HttpTimeout) {
+        requestTimeoutMillis = httpClientConfig.callTimeoutSeconds.seconds.inWholeMilliseconds
+      }
       followRedirects = false
       engine {
         config {
           connectTimeout(30.seconds.toJavaDuration())
           readTimeout(2.minutes.toJavaDuration())
-          callTimeout(Duration.ZERO) // disables call timeout
+          // bounds the whole call, so connections held open by undrained bodies are reclaimed
+          callTimeout(httpClientConfig.callTimeoutSeconds.seconds.toJavaDuration())
+          connectionPool(
+            ConnectionPool(
+              httpClientConfig.maxIdleConnections,
+              httpClientConfig.keepAliveSeconds,
+              TimeUnit.SECONDS,
+            )
+          )
           dispatcher(
             Dispatcher().apply {
-              maxRequests = config.httpClientConfig.maxRequests
-              maxRequestsPerHost = config.httpClientConfig.maxRequestsPerHost
+              maxRequests = httpClientConfig.maxRequests
+              maxRequestsPerHost = httpClientConfig.maxRequestsPerHost
             }
           )
         }
       }
       klogger.info {
-        "Setup of module HttpClient finished. maxRequest=${config.httpClientConfig.maxRequests} maxRequestsPerHost=${config.httpClientConfig.maxRequestsPerHost}"
+        "Setup of module HttpClient finished. maxRequest=${httpClientConfig.maxRequests} maxRequestsPerHost=${httpClientConfig.maxRequestsPerHost} callTimeout=${httpClientConfig.callTimeoutSeconds}s maxIdleConnections=${httpClientConfig.maxIdleConnections} keepAlive=${httpClientConfig.keepAliveSeconds}s"
       }
     }
   return generalHttpClient

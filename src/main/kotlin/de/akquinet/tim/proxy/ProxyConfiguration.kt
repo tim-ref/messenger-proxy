@@ -57,6 +57,8 @@ data class ProxyConfiguration(
     val caPrivateKeyFile: String,
     val domainWhiteList: String,
     val ssoDomain: String,
+    /** How long an impersonating certificate is kept in the cache before it is regenerated. */
+    val certCacheDuration: Duration = Duration.parse("24h"),
   )
 
   data class ActuatorConfiguration(val port: Int, val basePath: String)
@@ -92,7 +94,20 @@ data class ProxyConfiguration(
 
   data class TiMessengerInformationConfiguration(val port: Int)
 
-  data class HttpClientConfig(val maxRequests: Int = 200, val maxRequestsPerHost: Int = 200)
+  data class HttpClientConfig(
+    val maxRequests: Int = 200,
+    val maxRequestsPerHost: Int = 200,
+    /**
+     * Upper bound for an entire HTTP call (connect + write + read including body). OkHttp closes
+     * the socket when this elapses, which reclaims connections held open by undrained response
+     * bodies.
+     */
+    val callTimeoutSeconds: Long = 300,
+    /** Maximum number of idle keep-alive sockets held in the connection pool. */
+    val maxIdleConnections: Int = 50,
+    /** How long an idle keep-alive socket is retained before OkHttp reaps it. */
+    val keepAliveSeconds: Long = 60,
+  )
 
   data class OrphanedRoomCleanupConfig(
     val enabled: Boolean = true,

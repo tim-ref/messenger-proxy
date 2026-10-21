@@ -16,10 +16,17 @@
 package de.akquinet.tim.proxy.mocks
 
 import de.akquinet.tim.proxy.synapse.client.resources.SynapseAdminAccountData
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-fun mockAccountDataResponse(permissionConfig: String) =
+fun mockAccountDataResponse(
+  permissionConfig: String,
+  groupExceptions: List<String> = emptyList(),
+  legacyGroupExceptionFormat: Boolean = true,
+  serverExceptions: Set<String> = emptySet(),
+  userExceptions: Set<String> = emptySet(),
+) =
   SynapseAdminAccountData.Response(
     accountData =
       JsonObject(
@@ -33,7 +40,30 @@ fun mockAccountDataResponse(permissionConfig: String) =
                     Pair(
                       "de.gematik.tim.account.permissionconfig.pro.v1",
                       JsonObject(
-                        content = mapOf(Pair("defaultSetting", JsonPrimitive(permissionConfig)))
+                        content =
+                          mapOf(
+                            Pair("defaultSetting", JsonPrimitive(permissionConfig)),
+                            Pair(
+                              "groupExceptions",
+                              JsonArray(
+                                groupExceptions.map {
+                                  if (legacyGroupExceptionFormat) {
+                                    JsonPrimitive(it)
+                                  } else {
+                                    JsonObject(mapOf("groupName" to JsonPrimitive(it)))
+                                  }
+                                }
+                              ),
+                            ),
+                            Pair(
+                              "serverExceptions",
+                              JsonObject(serverExceptions.associateWith { JsonObject(emptyMap()) }),
+                            ),
+                            Pair(
+                              "userExceptions",
+                              JsonObject(userExceptions.associateWith { JsonObject(emptyMap()) }),
+                            ),
+                          )
                       ),
                     )
                   )

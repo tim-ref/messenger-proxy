@@ -21,6 +21,7 @@ import de.akquinet.tim.proxy.logging.LogLevelService
 import de.akquinet.tim.proxy.util.metricsModule
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -34,7 +35,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.util.pipeline.PipelineContext
-import kotlinx.coroutines.runBlocking
+import io.ktor.utils.io.discard
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -82,10 +83,10 @@ class ActuatorRoutesImpl(
       }
       .start()
 
-  private fun PipelineContext<Unit, ApplicationCall>.configureLogs(
+  private suspend fun PipelineContext<Unit, ApplicationCall>.configureLogs(
     paramNewLogLevel: String,
     paramLoggerIdentifier: String,
-  ) = runBlocking {
+  ) {
     val newLogLevel = call.parameters[paramNewLogLevel].toString()
     val loggerIdentifier = call.parameters[paramLoggerIdentifier].toString()
     logLevelService.setLogLevel(Level.toLevel(newLogLevel), loggerIdentifier)
@@ -94,23 +95,24 @@ class ActuatorRoutesImpl(
     logLevelService.scheduleLogLevelReset(loggerIdentifier)
   }
 
-  private fun PipelineContext<Unit, ApplicationCall>.initiateLogs(paramNewLogLevel: String) =
-    runBlocking {
-      val newLogLevel = call.parameters[paramNewLogLevel].toString()
-      logLevelService.setLogLevel(Level.toLevel(newLogLevel))
-      call.respond(HttpStatusCode.Accepted)
+  private suspend fun PipelineContext<Unit, ApplicationCall>.initiateLogs(
+    paramNewLogLevel: String
+  ) {
+    val newLogLevel = call.parameters[paramNewLogLevel].toString()
+    logLevelService.setLogLevel(Level.toLevel(newLogLevel))
+    call.respond(HttpStatusCode.Accepted)
 
-      logLevelService.scheduleLogLevelReset()
-    }
+    logLevelService.scheduleLogLevelReset()
+  }
 
   @OptIn(ExperimentalStdlibApi::class)
-  private fun PipelineContext<Unit, ApplicationCall>.performLoggerActuator() = runBlocking {
+  private suspend fun PipelineContext<Unit, ApplicationCall>.performLoggerActuator() {
     val acceptedValues =
       org.slf4j.event.Level.entries.joinToString(", ", "[", "]") { """"${it.name}"""" }
     call.respond(HttpStatusCode.OK, """{ "acceptedValues": $acceptedValues }""")
   }
 
-  private fun PipelineContext<Unit, ApplicationCall>.handleReadinessRequest() = runBlocking {
+  private suspend fun PipelineContext<Unit, ApplicationCall>.handleReadinessRequest() {
     // create response body
     val readinessResponse = HealthReadinessResponse()
 
@@ -124,37 +126,44 @@ class ActuatorRoutesImpl(
     )
   }
 
-  private fun PipelineContext<Unit, ApplicationCall>.performHealthCheck(healthPath: String) =
-    runBlocking {
-      val inboundProxyResponse =
-        httpClient.get("http://127.0.0.1:" + inboundProxyConfig.port + healthPath)
-      val outboundProxyResponse =
-        httpClient.get("http://127.0.0.1:" + outboundProxyConfig.port + healthPath)
+  private suspend fun PipelineContext<Unit, ApplicationCall>.performHealthCheck(
+    healthPath: String
+  ) {
+    val inboundProxyResponse =
+      httpClient.get("http://127.0.0.1:" + inboundProxyConfig.port + healthPath)
+    inboundProxyResponse
+      .bodyAsChannel()
+      .discard() // body not of interest, just release the connection
+    val outboundProxyResponse =
+      httpClient.get("http://127.0.0.1:" + outboundProxyConfig.port + healthPath)
+    outboundProxyResponse
+      .bodyAsChannel()
+      .discard() // body not of interest, just release the connection
 
-      // create response body
-      val livenessResponse =
-        HealthLivenessResponse(
-          inboundProxy = inboundProxyResponse.status == HttpStatusCode.OK,
-          outboundProxy = outboundProxyResponse.status == HttpStatusCode.OK,
-        )
-
-      // calculate status
-      val responseStatus: HttpStatusCode =
-        if (
-          setOf(inboundProxyResponse.status, outboundProxyResponse.status)
-            .containsOnly(HttpStatusCode.OK)
-        ) {
-          HttpStatusCode.OK
-        } else {
-          HttpStatusCode.ServiceUnavailable
-        }
-
-      call.respondText(
-        Json.encodeToString(livenessResponse),
-        ContentType.Application.Json,
-        responseStatus,
+    // create response body
+    val livenessResponse =
+      HealthLivenessResponse(
+        inboundProxy = inboundProxyResponse.status == HttpStatusCode.OK,
+        outboundProxy = outboundProxyResponse.status == HttpStatusCode.OK,
       )
-    }
+
+    // calculate status
+    val responseStatus: HttpStatusCode =
+      if (
+        setOf(inboundProxyResponse.status, outboundProxyResponse.status)
+          .containsOnly(HttpStatusCode.OK)
+      ) {
+        HttpStatusCode.OK
+      } else {
+        HttpStatusCode.ServiceUnavailable
+      }
+
+    call.respondText(
+      Json.encodeToString(livenessResponse),
+      ContentType.Application.Json,
+      responseStatus,
+    )
+  }
 }
 
 fun <T> Set<T>.containsOnly(element: T): Boolean = this.size == 1 && this.first() == element

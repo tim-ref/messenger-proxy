@@ -22,6 +22,9 @@ import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import net.folivo.trixnity.api.client.MatrixApiClient
 import net.folivo.trixnity.core.model.UserId
 
@@ -75,4 +78,59 @@ class AccessTokenToUserIdImplTest :
       cut("accessToken") shouldBe UserId("@user:server")
       whoAmICalled shouldBe 1
     }
+    should("expire cached value after cacheDuration") {
+      val shortCacheCut = shortCacheCut { whoAmICalled++ }
+      shortCacheCut("token1")
+      whoAmICalled shouldBe 1
+      delay(200.milliseconds)
+      shortCacheCut("token1")
+      whoAmICalled shouldBe 2
+    }
+    should("evict expired entries from cache on update") {
+      val shortCacheCut = shortCacheCut { whoAmICalled++ }
+      shortCacheCut("token1")
+      cacheSizeOf(shortCacheCut) shouldBe 1
+      delay(200.milliseconds)
+      // fetching another token evicts the expired token1 entry
+      shortCacheCut("token2")
+      cacheSizeOf(shortCacheCut) shouldBe 1
+    }
   })
+
+private fun shortCacheCut(onWhoAmI: () -> Unit) =
+  AccessTokenToUserIdImpl(
+    config =
+      ProxyConfiguration.InboundProxyConfiguration(
+        enforceDomainList = false,
+        homeserverUrl = "http://localhost:8083",
+        synapseHealthEndpoint = "/health",
+        synapsePort = 443,
+        port = 8090,
+        accessTokenToUserIdCacheDuration = 100.milliseconds,
+      ),
+    matrixApiClient =
+      MatrixApiClient {
+        HttpClient(
+          MockEngine {
+            onWhoAmI()
+            respond(
+              """{"user_id":"@user:server","device_id":"ABCDEF","is_guest":false}""",
+              headers =
+                headersOf(
+                  HttpHeaders.ContentType to
+                    listOf(ContentType.Application.Json.withCharset(Charsets.UTF_8).toString())
+                ),
+            )
+          }
+        ) {
+          it()
+        }
+      },
+  )
+
+private fun cacheSizeOf(cut: AccessTokenToUserIdImpl): Int {
+  val field = AccessTokenToUserIdImpl::class.java.getDeclaredField("cache")
+  field.isAccessible = true
+  @Suppress("UNCHECKED_CAST")
+  return (field.get(cut) as MutableStateFlow<Map<String, *>>).value.size
+}

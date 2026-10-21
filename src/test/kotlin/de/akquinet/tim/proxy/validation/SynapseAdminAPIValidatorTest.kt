@@ -76,6 +76,63 @@ class SynapseAdminAPIValidatorTest :
           UserId("@invitingUser:domain.de"),
         ) shouldBeLeft InviteBlocked
       }
+
+      should("allow invite if isInsuredPerson is in allowed groups and invitee is insured person") {
+        coEvery { synapseService.getAccountData(any()) } returns
+          mockAccountDataResponse("block all", groupExceptions = listOf("isInsuredPerson")).right()
+
+        validator.validateInvitePermission(
+          "@invitedUser:domain.de",
+          UserId("@invitingUser:domain.de"),
+        ) shouldBeRight ValidationSuccess
+      }
+
+      should("block invite from a server listed in serverExceptions under \"allow all\"") {
+        coEvery { synapseService.getAccountData(any()) } returns
+          mockAccountDataResponse("allow all", serverExceptions = setOf("domain.de")).right()
+
+        validator.validateInvitePermission(
+          "@invitedUser:domain.de",
+          UserId("@invitingUser:domain.de"),
+        ) shouldBeLeft InviteBlocked
+      }
+
+      should("permit invite from a server not listed in serverExceptions under \"allow all\"") {
+        coEvery { synapseService.getAccountData(any()) } returns
+          mockAccountDataResponse("allow all", serverExceptions = setOf("other.de")).right()
+
+        validator.validateInvitePermission(
+          "@invitedUser:domain.de",
+          UserId("@invitingUser:domain.de"),
+        ) shouldBeRight ValidationSuccess
+      }
+
+      should("permit invite from a server listed in serverExceptions under \"block all\"") {
+        coEvery { synapseService.getAccountData(any()) } returns
+          mockAccountDataResponse("block all", serverExceptions = setOf("domain.de")).right()
+
+        validator.validateInvitePermission(
+          "@invitedUser:domain.de",
+          UserId("@invitingUser:domain.de"),
+        ) shouldBeRight ValidationSuccess
+      }
+
+      should(
+        "allow invite if isInsuredPerson is in allowed groups and invitee is insured person (gematik)"
+      ) {
+        coEvery { synapseService.getAccountData(any()) } returns
+          mockAccountDataResponse(
+              permissionConfig = "block all",
+              groupExceptions = listOf("isInsuredPerson"),
+              legacyGroupExceptionFormat = false,
+            )
+            .right()
+
+        validator.validateInvitePermission(
+          "@invitedUser:domain.de",
+          UserId("@invitingUser:domain.de"),
+        ) shouldBeRight ValidationSuccess
+      }
     }
     context("redact event validation") {
       should("succeed with timestamp one minute younger than twenty four hours") {
